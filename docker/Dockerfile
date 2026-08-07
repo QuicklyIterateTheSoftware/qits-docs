@@ -41,7 +41,13 @@ COPY . .
 
 # -Dnative flips quarkus.native.enabled (this project carries its own `native` profile). Cap
 # native-image RAM so the build is deterministic on small machines.
-RUN ./mvnw -B -ntp package -Dnative -DskipTests -Dquarkus.native.native-image-xmx=4g
+#
+# NOTE THE ABSENT -DskipTests, which every sibling's builder stage carries. This is where the suite
+# runs, and it is the only place it can: the CI step container has node and docker and no JDK, so a
+# `./mvnw` line there fails on JAVA_HOME. The suite needs no docker, no network and no
+# qits-artifacts — it is five cases over the route grammar — so it costs seconds and it stops a
+# broken grammar here rather than at a deploy.
+RUN ./mvnw -B -ntp package -Dnative -Dquarkus.native.native-image-xmx=4g
 
 # --- runtime -------------------------------------------------------------------------------------
 # `localhost:8081/redhat/…` is the same mirror, pointed at registry.access.redhat.com.

@@ -23,12 +23,19 @@ steps:
     script: |
       set -eu
 
-      # The suite needs no docker, no network and no qits-artifacts — this service holds no state
-      # and its tests are about the route grammar. It runs before the image build so a broken
-      # grammar costs seconds rather than a native compile.
-      ./mvnw -B -ntp verify
-
+      # NO `./mvnw` HERE, and that is the platform's convention rather than an omission: this image
+      # carries node and a docker client and NO JDK, so a maven line in a step script fails with
+      # "JAVA_HOME is not defined correctly" — measured, on this pipeline's first run. Every Java
+      # service on this platform builds inside its Dockerfile's Mandrel stage, which brings its own,
+      # and the step's whole job is to drive docker.
+      #
+      # The suite therefore runs in that stage too (docker/Dockerfile does NOT pass -DskipTests):
+      # it needs no docker, no network and no qits-artifacts, so it costs seconds and a broken route
+      # grammar fails the build before the native compile rather than after a deploy.
+      #
+      # `--network qits-net` is what lets the builder stage reach the platform's own registries, the
+      # same flag qits-artifacts' pipeline passes for the same reason.
       ref="$QITS_REGISTRY/$QITS_IMAGE_REPOSITORY/qits-platform-docs:$QITS_CI_SHA"
-      docker build -t "$ref" -f docker/Dockerfile .
+      docker build --network qits-net -t "$ref" -f docker/Dockerfile .
       docker push "$ref"
       docker rmi "$ref" || true
