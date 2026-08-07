@@ -13,7 +13,6 @@ import jakarta.inject.Inject;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import org.jboss.logging.Logger;
 
@@ -116,7 +115,20 @@ public class DocsRoutes {
 
   // --- reading ----------------------------------------------------------------------------------
 
-  /** {@code GET /platform-docs/<site>[/]} — 302 to the newest version's directory. */
+  /**
+   * {@code GET /platform-docs/<site>[/]} — 302 to the <b>reader</b>, not to the bundle.
+   *
+   * <p><b>This is the human entry point, so it must land somewhere with the version picker on
+   * it.</b> It used to redirect straight to the newest bundle directory, which served a
+   * full-viewport Storybook with no rail — so opening a doc took the version picker away, and the
+   * one URL a person would paste or bookmark was the one that could not switch version. The bundle
+   * keeps its own address ({@code …/-/<version>/…}); this spelling means "read this", and reading
+   * happens in the shell.
+   *
+   * <p>No version is resolved here any more. The reader fetches the list it needs for the picker
+   * anyway, so resolving the newest here as well would be the same question asked twice, one round
+   * trip earlier, and a chance for the two answers to differ.
+   */
   private void latest(RoutingContext rc) {
     String site = rc.pathParam("name");
     // A SINGLE segment beginning with @ is a scope, not a site — /platform-docs/@qits is the index
@@ -127,12 +139,13 @@ public class DocsRoutes {
       rc.next();
       return;
     }
-    List<String> versions = upstream.versions(site);
-    if (versions.isEmpty()) {
+    // Still checked here, because a 404 for a site that does not exist is worth answering before a
+    // page load rather than inside one — the reader would have to render a shell to say the same.
+    if (upstream.versions(site).isEmpty()) {
       DocsErrors.send(rc, 404, "nothing is published under '" + site + "'");
       return;
     }
-    redirect(rc, DocsPaths.BASE + "/" + site + "/-/" + versions.getFirst() + "/");
+    redirect(rc, DocsPaths.BASE + "/read/" + site);
   }
 
   /**
