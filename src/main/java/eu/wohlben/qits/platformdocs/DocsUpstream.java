@@ -152,6 +152,50 @@ public class DocsUpstream {
     return List.copyOf(catalog);
   }
 
+  /** One published version, as the store reports it. */
+  record Version(String version, int fileCount, long totalBytes, String publishedAt) {}
+
+  /**
+   * Every published version of one site with its figures — {@link #versions} plus the detail a
+   * catalog page shows.
+   *
+   * <p>Two methods over one upstream call rather than one method the redirect path has to unpack:
+   * resolving {@code latest} wants a list of strings and nothing else, and keeping that path free
+   * of a record it does not read is what keeps the hot route cheap to follow.
+   *
+   * @return the versions newest-first, or an empty list when the site has none
+   * @throws DocsUpstreamException the store could not be asked
+   */
+  List<Version> versionDetails(String site) {
+    HttpResponse<String> response =
+        send(HttpRequest.newBuilder(uri(site)).GET(), HttpResponse.BodyHandlers.ofString());
+    if (response.statusCode() == 404) {
+      return List.of();
+    }
+    if (response.statusCode() != 200) {
+      throw new DocsUpstreamException(
+          "qits-artifacts answered HTTP " + response.statusCode() + " for the versions of " + site);
+    }
+    List<Version> versions = new ArrayList<>();
+    try {
+      JsonArray listed = new JsonObject(response.body()).getJsonArray("versions", new JsonArray());
+      for (int i = 0; i < listed.size(); i++) {
+        JsonObject entry = listed.getJsonObject(i);
+        versions.add(
+            new Version(
+                entry.getString("version"),
+                entry.getInteger("fileCount", 0),
+                entry.getLong("totalBytes", 0L),
+                entry.getString("publishedAt")));
+      }
+    } catch (RuntimeException malformed) {
+      throw new DocsUpstreamException(
+          "qits-artifacts answered something that is not a version list: "
+              + malformed.getMessage());
+    }
+    return List.copyOf(versions);
+  }
+
   /**
    * One file of one published version, as a live stream.
    *

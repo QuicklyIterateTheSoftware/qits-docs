@@ -43,9 +43,10 @@ final class DocsPaths {
   private static final String SEGMENT = "(?:@?[A-Za-z0-9][A-Za-z0-9._~-]{0,127})";
 
   /**
-   * The machine surface a site name may never claim: Quarkus' non-application root ({@code
-   * /platform-docs/q/**}, which is where health lives) and this service's own {@code
-   * /platform-docs/api/**}.
+   * The prefixes a site name may never claim: Quarkus' non-application root ({@code
+   * /platform-docs/q/**}, where health lives), this service's own {@code /platform-docs/api/**},
+   * and {@code /platform-docs/read/**} — the client's reader page, which wraps a bundle in a rail
+   * carrying the version picker and therefore has to reach the SPA rather than this wire.
    *
    * <p><b>This is structural on purpose rather than a matter of route order.</b> Both are ordinary
    * site names as far as the character classes are concerned — {@code q/health/ready} is three
@@ -57,7 +58,7 @@ final class DocsPaths {
    * <p>Zero-width, so it costs the named-group count nothing — which matters, see the class
    * javadoc.
    */
-  private static final String NOT_RESERVED = "(?!q/|api/)";
+  private static final String NOT_RESERVED = "(?!q/|api/|read/)";
 
   /**
    * {@code <site>} — {@code ui-components}, {@code @qits/ui-components}, or a deeper project path.

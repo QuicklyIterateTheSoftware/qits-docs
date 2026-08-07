@@ -84,11 +84,14 @@ class DocsPathsTest {
     assertFalse(matches(DocsPaths.SITE, "/platform-docs/q/health/live"));
     assertFalse(matches(DocsPaths.SITE_LATEST, "/platform-docs/q/metrics/"));
     assertFalse(matches(DocsPaths.SITE, "/platform-docs/api/sites"));
+    assertFalse(matches(DocsPaths.SITE, "/platform-docs/read/@qits/ui-components"));
+    assertFalse(matches(DocsPaths.FILE, "/platform-docs/read/x/-/1.0.0/i.html"));
     assertFalse(matches(DocsPaths.FILE, "/platform-docs/q/health/-/1.0.0/x"));
 
     // The reservation is exactly two prefixes and does not leak into ordinary names.
     assertTrue(matches(DocsPaths.SITE, "/platform-docs/quarkus-things"), "q is not a prefix of q/");
     assertTrue(matches(DocsPaths.SITE, "/platform-docs/apiary"));
+    assertTrue(matches(DocsPaths.SITE, "/platform-docs/readme"), "read is not a prefix of read/");
     assertTrue(matches(DocsPaths.SITE, "/platform-docs/@qits/api"), "reserved only at the root");
   }
 

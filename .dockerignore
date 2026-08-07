@@ -15,6 +15,15 @@
 **/target
 **/target-ide
 
+# The client's install output. Hundreds of megabytes of symlink farm, and the build stage reads
+# none of it — it runs no install and no client build.
+#
+# NOTE THE ASYMMETRY with the platform's recipe, which excludes dist/ too: here dist/ is the
+# PAYLOAD. It is the bundle the CI step built where the @qits registry is reachable, it is the only
+# form of the client this image can be given, and excluding it would fail the build at the test -f.
+src/main/webui/node_modules
+src/main/webui/.angular
+
 # Local env / IDE cruft
 .env
 .idea

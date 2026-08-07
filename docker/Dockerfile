@@ -11,11 +11,14 @@
 #
 #     docker build -t qits/platform-docs:latest -f docker/Dockerfile .
 #
-# NOTE WHAT IS ABSENT, compared with every sibling that serves a client: there are no Quinoa flags,
-# no node install and no pre-built bundle to carry in. This service has no webui yet — the index UI
-# is `qits-platform-spa-docs` and is not wired in — so the build context is source and nothing else.
-# When that lands, this stage grows the same three overrides qits-gateway's carries, and for the
-# same reason (the @qits scope is reachable from no address a docker build has).
+# THE CLIENT IS BUILT BEFORE THIS IMAGE, NOT IN IT — qits-gateway's deviation from the platform's
+# Quinoa recipe, for its reason exactly. src/main/webui is qits-platform-spa-docs and it depends on
+# @qits/ui-components, which exists ONLY on the platform's own npm registry. A RUN step in a docker
+# build reaches the public internet and can reach that registry by NO address: not the qits-net
+# alias, not localhost:8081, not host.docker.internal. So the install happens where it can — the CI
+# step container on qits-net, or a developer's host — and this stage packages an already-built
+# dist/ with Quinoa's install and build commands replaced by `--version`. An install that "worked"
+# here would have resolved the @qits scope against npmjs.org, where those names do not exist.
 
 # --- stage `build`: native-compile ---------------------------------------------------------------
 # The builder JDK MUST be 25: native-image cannot read bytecode newer than its own JDK, and this
@@ -47,7 +50,29 @@ COPY . .
 # `./mvnw` line there fails on JAVA_HOME. The suite needs no docker, no network and no
 # qits-artifacts — it is five cases over the route grammar — so it costs seconds and it stops a
 # broken grammar here rather than at a deploy.
-RUN ./mvnw -B -ntp package -Dnative -Dquarkus.native.native-image-xmx=4g
+# The `cp` onto itself before the build is not redundant: Quinoa MOVES build-dir into
+# target/quinoa/build, and overlayfs cannot rename a directory that still lives in a LOWER image
+# layer. It answers EXDEV, the JDK falls back to its cross-file-store path, and that path refuses a
+# non-empty directory — the build dies seconds in with DirectoryNotEmptyException naming the source
+# and explaining nothing. Every sibling whose builder stage CREATES dist is immune by accident;
+# ours arrives by COPY. It must be in THIS RUN, because a layer boundary is what it is undoing.
+#
+# The `test -f` stops a context with no bundle before the multi-minute native compile. A forgotten
+# `npm run build` in the CI step is then a red build rather than a service that ships without its
+# reading room.
+RUN d=src/main/webui/dist/qits-platform-spa-docs/browser; \
+    test -f "$d/index.html" || { \
+      echo "No built client at $d." >&2; \
+      echo "The build context must carry one: run 'npm ci && npm run build'" >&2; \
+      echo "in src/main/webui first — this stage cannot, see the header." >&2; \
+      exit 1; }; \
+    cp -a "$d" "$d.layer" && rm -rf "$d" && mv "$d.layer" "$d" && \
+    ./mvnw -B -ntp package -Dnative -Dquarkus.native.native-image-xmx=4g \
+      -Dquarkus.quinoa.package-manager-install=true \
+      -Dquarkus.quinoa.package-manager-install.node-version=22.22.0 \
+      -Dquarkus.quinoa.package-manager-command.install=--version \
+      -Dquarkus.quinoa.package-manager-command.ci=--version \
+      -Dquarkus.quinoa.package-manager-command.build=--version
 
 # --- runtime -------------------------------------------------------------------------------------
 # `localhost:8081/redhat/…` is the same mirror, pointed at registry.access.redhat.com.

@@ -55,22 +55,63 @@ public class DocsRoutes {
 
   @Inject DocsUpstream upstream;
 
+  /**
+   * Where these routes sit relative to Quinoa's two, and it is the whole reason the client renders.
+   *
+   * <p>Measured order (Quinoa 2.8.2, Quarkus 3.34.6): Quinoa registers its <b>static resources</b>
+   * at 1060 and its <b>SPA fallback</b> near 40 000. These routes must sit strictly between them,
+   * which is qits-gateway's arrangement and for the same two reasons:
+   *
+   * <ul>
+   *   <li><b>Below 1060 the client stops loading.</b> Its bundle is {@code main-<hash>.js} — one
+   *       segment, alphanumeric, a perfectly good site name — so {@code SITE} claims it, asks the
+   *       store for the versions of a site called {@code main-O4M5TZHF.js}, and answers 404. The
+   *       index renders and every asset it asks for is gone. Measured, not reasoned about.
+   *   <li><b>At or past 40 000 the reading routes stop working.</b> The SPA fallback would answer
+   *       every unmatched path with {@code index.html} first, so a bundle file would come back as
+   *       the client's own shell at 200.
+   * </ul>
+   *
+   * <p>Both Quinoa numbers are read off the jar and are not API — re-check them when the Quinoa pin
+   * moves.
+   */
+  private static final int ROUTE_ORDER = 20_000;
+
   void init(@Observes Router router) {
     // The machine surface first. It does not have to be — DocsPaths reserves `api/` and `q/` out of
     // the site grammar, so nothing below can claim these however they are ordered — but a reader
     // arriving at this method should see the narrow routes before the ones that look like a
     // catch-all, and the two guards costing nothing is the point of having both.
-    router.get(DocsPaths.BASE + "/api/sites").blockingHandler(guarded("sites", this::sites));
+    router
+        .get(DocsPaths.BASE + "/api/sites")
+        .order(ROUTE_ORDER)
+        .blockingHandler(guarded("sites", this::sites));
+    router
+        .get(DocsPaths.BASE + "/api/versions")
+        .blockingHandler(guarded("versions", this::apiVersions));
 
     // Then longest path first. Also disjoint by construction: a bare `-` is not a name segment, so
     // no site path can be read as a version path and no version root as a file.
-    router.getWithRegex(DocsPaths.FILE).blockingHandler(guarded("file", this::file));
-    router.getWithRegex(DocsPaths.VERSION_INDEX).blockingHandler(guarded("index", this::index));
+    router
+        .getWithRegex(DocsPaths.FILE)
+        .order(ROUTE_ORDER)
+        .blockingHandler(guarded("file", this::file));
+    router
+        .getWithRegex(DocsPaths.VERSION_INDEX)
+        .order(ROUTE_ORDER)
+        .blockingHandler(guarded("index", this::index));
     router
         .getWithRegex(DocsPaths.VERSION_ROOT)
+        .order(ROUTE_ORDER)
         .blockingHandler(guarded("version root", this::toDirectory));
-    router.getWithRegex(DocsPaths.SITE_LATEST).blockingHandler(guarded("latest", this::latest));
-    router.getWithRegex(DocsPaths.SITE).blockingHandler(guarded("latest", this::latest));
+    router
+        .getWithRegex(DocsPaths.SITE_LATEST)
+        .order(ROUTE_ORDER)
+        .blockingHandler(guarded("latest", this::latest));
+    router
+        .getWithRegex(DocsPaths.SITE)
+        .order(ROUTE_ORDER)
+        .blockingHandler(guarded("latest", this::latest));
   }
 
   // --- reading ----------------------------------------------------------------------------------
@@ -78,6 +119,14 @@ public class DocsRoutes {
   /** {@code GET /platform-docs/<site>[/]} — 302 to the newest version's directory. */
   private void latest(RoutingContext rc) {
     String site = rc.pathParam("name");
+    // A SINGLE segment beginning with @ is a scope, not a site — /platform-docs/@qits is the index
+    // of what @qits publishes, and the client owns that page. Falling through hands it to Quinoa's
+    // SPA route, which is registered after these; answering 404 here would make every scope page a
+    // dead link, and answering the SPA here would put a second renderer in this service.
+    if (site.startsWith("@") && site.indexOf('/') < 0) {
+      rc.next();
+      return;
+    }
     List<String> versions = upstream.versions(site);
     if (versions.isEmpty()) {
       DocsErrors.send(rc, 404, "nothing is published under '" + site + "'");
@@ -196,6 +245,37 @@ public class DocsRoutes {
     byScope.forEach(
         (scope, docs) -> scopes.add(new JsonObject().put("scope", scope).put("docs", docs)));
     respond(rc, 200, new JsonObject().put("scopes", scopes));
+  }
+
+  /**
+   * {@code GET /platform-docs/api/versions?site=<name>} — every published version, newest first.
+   *
+   * <p><b>A query parameter rather than a path segment</b>, and that is forced rather than chosen:
+   * a site name carries slashes and usually a leading {@code @}, so {@code
+   * /api/versions/@qits/ui-…} would need the same {@code /-/} grammar the reading routes use — for
+   * a machine surface where nobody is reading the URL. The reading spelling of the same question is
+   * {@code /platform-docs/<site>}, which answers a redirect because that is what a browser wants.
+   */
+  private void apiVersions(RoutingContext rc) {
+    String site = rc.request().getParam("site");
+    if (site == null || site.isBlank()) {
+      DocsErrors.send(rc, 400, "?site= is required");
+      return;
+    }
+    JsonArray listed = new JsonArray();
+    for (DocsUpstream.Version version : upstream.versionDetails(site)) {
+      listed.add(
+          new JsonObject()
+              .put("version", version.version())
+              .put("fileCount", version.fileCount())
+              .put("totalBytes", version.totalBytes())
+              .put("publishedAt", version.publishedAt()));
+    }
+    if (listed.isEmpty()) {
+      DocsErrors.send(rc, 404, "nothing is published under '" + site + "'");
+      return;
+    }
+    respond(rc, 200, new JsonObject().put("name", site).put("versions", listed));
   }
 
   // --- plumbing ---------------------------------------------------------------------------------

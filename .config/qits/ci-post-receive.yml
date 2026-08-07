@@ -23,6 +23,36 @@ steps:
     script: |
       set -eu
 
+      # THE CLIENT IS BUILT HERE, and this is the only place it can be. src/main/webui is
+      # qits-platform-spa-docs and it depends on @qits/ui-components, which lives only on the
+      # platform's own npm registry — reachable from this container on qits-net and from NO address
+      # a docker build has. So the bundle is built here and the image build packages it; see
+      # docker/Dockerfile's header.
+      #
+      # The clone is --depth 50 and does not recurse, so the submodule is initialised by hand — and
+      # from THIS platform's git host rather than from the .gitmodules URL, which names GitHub.
+      frontend_url="${QITS_CI_REPOSITORY_URL%/*}/qits-platform-spa-docs"
+      git -c submodule.qits-platform-spa-docs.url="$frontend_url" \
+        submodule update --init src/main/webui
+
+      cd src/main/webui
+      # npm pins a full resolved URL per package and this lockfile was generated on the deployment
+      # host, so every entry names localhost:8081 — an address that does not exist in this
+      # container. `npm ci` fetches by that URL and never asks the configured registry, so without
+      # this swap the install dies on connection refused. The paths are identical on both
+      # addresses; the integrity hashes are what make replacing only the ORIGIN safe.
+      npm_origin=$(node -p 'new URL(process.env.QITS_NPM_PROXY_URL).origin')
+      sed -i -E "s#(\"resolved\": \")https?://[^/\"]+#\1$npm_origin#" package-lock.json
+
+      # ENVIRONMENT, not a file: this repo COMMITS an .npmrc naming localhost:8081 (right for a
+      # developer on the host), and npm ranks a project .npmrc ABOVE ~/.npmrc — so a `cat >
+      # ~/.npmrc` preamble would be written and silently ignored. npm_config_* outranks both.
+      env npm_config_registry="$QITS_NPM_PROXY_URL" \
+          "npm_config_@qits:registry=$QITS_NPM_REGISTRY_URL" \
+          npm ci --no-audit --no-fund
+      npm run build
+      cd -
+
       # NO `./mvnw` HERE, and that is the platform's convention rather than an omission: this image
       # carries node and a docker client and NO JDK, so a maven line in a step script fails with
       # "JAVA_HOME is not defined correctly" — measured, on this pipeline's first run. Every Java

@@ -33,7 +33,8 @@ this process adds is a redirect or a header, and the section below is the whole 
 | `GET /platform-docs/<site>/-/<version>` | 302 → the same path **with a trailing slash** |
 | `GET /platform-docs/<site>/-/<version>/` | the bundle's `index.html` |
 | `GET /platform-docs/<site>/-/<version>/<path>` | one file, streamed |
-| `GET /platform-docs/api/sites` | the catalog — **501 for now**, see "Not built yet" |
+| `GET /platform-docs/api/sites` | the catalog, grouped by scope |
+| `GET /platform-docs/api/versions?site=<name>` | one site's versions, newest first |
 
 A `<site>` is whatever namespacing the publishing project already uses: `@qits/ui-components` where
 there is an npm package, `someproject/somelib` where there is not, up to four segments deep. The
@@ -117,12 +118,35 @@ qits-artifacts would take this container down for an outage it is designed to su
 > that is running perfectly. Route order would also fix it, and would keep being right exactly until
 > someone reordered `DocsRoutes.init` for readability.
 
+## The client
+
+`src/main/webui` is the [qits-platform-spa-docs](https://github.com/QuicklyIterateTheSoftware/qits-platform-spa-docs)
+submodule, built and served by Quinoa. Three layers over the same store:
+
+    /platform-docs/                          what publishes documentation, by scope
+    /platform-docs/@qits                     what that scope publishes
+    /platform-docs/read/<site>/-/<version>   one bundle, with a version picker beside it
+
+**The reader shows two navigations side by side, and that is the arrangement.** A bundle is a whole
+application — Storybook ships its own full-height sidebar — so the client cannot put the version
+picker inside it and must not try. It owns a narrow rail (where you are, which version) and hands
+the rest to an `<iframe>`.
+
+> **`DocsRoutes.ROUTE_ORDER` is 20 000, between Quinoa's two routes, and the client does not render
+> without it.** Quinoa registers static resources at 1060 and its SPA fallback near 40 000. Below
+> 1060, `SITE` claims the client's own `main-<hash>.js` — one alphanumeric segment, a perfectly good
+> site name — asks the store for its versions and answers 404: the index renders and every asset is
+> gone. At or past 40 000 the fallback answers bundle paths with `index.html` instead. Both numbers
+> are read off the Quinoa jar and are not API; re-check them when the pin moves.
+
+`/platform-docs/@qits` is the one path this service **declines**: a single segment beginning with
+`@` is a scope, and `latest()` calls `next()` so Quinoa's fallback serves the client. `read/` is
+reserved out of the site grammar for the same reason, beside `q/` and `api/`.
+
 ## Not built yet
 
-- **The catalog.** `GET /platform-docs/api/sites` answers 501. qits-artifacts has no
-  list-every-site endpoint yet — its docs routes answer *a* site's versions — so there is nothing
-  honest for this to proxy. When that lands, this route proxies it and gains no opinion of its own.
-- **The index UI.** `frontends/qits-platform-spa-docs` is the Angular client that will render the
-  catalog, built in by Quinoa at `src/main/webui`. It waits on the catalog above.
-- **A native IT.** `mvn verify -Dnative` compiles the binary but nothing yet drives it. The one
-  claim worth proving that way is that `java.net.http` streaming survives the compile.
+- **A native IT.** `mvn verify -Dnative` compiles the binary but nothing yet drives it. The claim
+  worth proving that way is that `java.net.http` streaming survives the compile.
+- **Anything but Storybook.** Every bundle so far is one, and the reader assumes only that a bundle
+  has an `index.html` and refers to its assets relatively. A generator that does neither would need
+  the reader to learn something.
