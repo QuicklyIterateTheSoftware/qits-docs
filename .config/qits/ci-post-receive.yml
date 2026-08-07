@@ -1,0 +1,34 @@
+# The pipeline qits-ci runs on every push to a tracked branch of this repository.
+#
+# ONE STEP, and it is the whole of what this repository ships: tests, then a native image pushed to
+# qits-artifacts under $QITS_REGISTRY/$QITS_IMAGE_REPOSITORY/qits-platform-docs:$QITS_CI_SHA — the
+# tag convention qits-platform-deployments pulls by.
+#
+# `docker: true` is the declared opt-in that mounts the host socket for this step, because building
+# and pushing an image is what it is for. It is root-equivalent on the host and is declared here
+# where a diff shows it — see qits-ci's AGENTS.md on the untrusted-input posture.
+#
+# NOTE WHAT IS ABSENT compared with qits-gateway's pipeline, which this otherwise mirrors: there is
+# no submodule init and no `npm ci && npm run build` prelude, because this service carries no webui
+# yet. `qits-platform-spa-docs` is the index UI and is not wired in. The day it is, this step grows
+# the same prelude for the same reason — the @qits scope is reachable from qits-net and from no
+# address a docker build has, so the bundle must be built HERE and arrive in the build context.
+#
+# The image is built by docker/Dockerfile's Mandrel builder stage rather than by this container:
+# node-docker-base carries no GraalVM, and the builder stage brings its own native-image.
+steps:
+  - image: qits/build-images/node-docker-base:latest
+    docker: true
+    timeout-seconds: 3600
+    script: |
+      set -eu
+
+      # The suite needs no docker, no network and no qits-artifacts — this service holds no state
+      # and its tests are about the route grammar. It runs before the image build so a broken
+      # grammar costs seconds rather than a native compile.
+      ./mvnw -B -ntp verify
+
+      ref="$QITS_REGISTRY/$QITS_IMAGE_REPOSITORY/qits-platform-docs:$QITS_CI_SHA"
+      docker build -t "$ref" -f docker/Dockerfile .
+      docker push "$ref"
+      docker rmi "$ref" || true
