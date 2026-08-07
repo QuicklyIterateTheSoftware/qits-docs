@@ -115,6 +115,43 @@ public class DocsUpstream {
     return List.copyOf(versions);
   }
 
+  /** One site in the catalog, as the store reports it. */
+  record CatalogEntry(String name, int versionCount, String latestVersion) {}
+
+  /**
+   * Every site the store holds.
+   *
+   * <p>Taken flat and grouped by the caller: a scope lives in a site's name, and the store is right
+   * not to decide that {@code @qits/ui-components} belongs under {@code @qits} — that is a reading
+   * choice, which makes it this service's.
+   *
+   * @throws DocsUpstreamException the store could not be asked
+   */
+  List<CatalogEntry> catalog() {
+    HttpResponse<String> response =
+        send(HttpRequest.newBuilder(root()).GET(), HttpResponse.BodyHandlers.ofString());
+    if (response.statusCode() != 200) {
+      throw new DocsUpstreamException(
+          "qits-artifacts answered HTTP " + response.statusCode() + " for the docs catalog");
+    }
+    List<CatalogEntry> catalog = new ArrayList<>();
+    try {
+      JsonArray listed = new JsonObject(response.body()).getJsonArray("sites", new JsonArray());
+      for (int i = 0; i < listed.size(); i++) {
+        JsonObject entry = listed.getJsonObject(i);
+        catalog.add(
+            new CatalogEntry(
+                entry.getString("name"),
+                entry.getInteger("versionCount", 0),
+                entry.getString("latestVersion")));
+      }
+    } catch (RuntimeException malformed) {
+      throw new DocsUpstreamException(
+          "qits-artifacts answered something that is not a catalog: " + malformed.getMessage());
+    }
+    return List.copyOf(catalog);
+  }
+
   /**
    * One file of one published version, as a live stream.
    *
@@ -140,16 +177,23 @@ public class DocsUpstream {
     return response.headers().firstValue(name).orElse(null);
   }
 
+  /** The store's docs repository root — the catalog lives there. */
+  private URI root() {
+    return URI.create(trimmed());
+  }
+
   private URI uri(String suffix) {
     // Built by concatenation rather than through URI.resolve: a site name carries slashes and often
     // a leading @, and every convenience API in sight would either decode or re-encode it. The
     // segments reaching here have already been matched against DocsPaths' character classes, so
     // there is nothing in them a URI could legitimately need to escape.
-    String base =
-        artifactsUrl.endsWith("/")
-            ? artifactsUrl.substring(0, artifactsUrl.length() - 1)
-            : artifactsUrl;
-    return URI.create(base + "/" + suffix);
+    return URI.create(trimmed() + "/" + suffix);
+  }
+
+  private String trimmed() {
+    return artifactsUrl.endsWith("/")
+        ? artifactsUrl.substring(0, artifactsUrl.length() - 1)
+        : artifactsUrl;
   }
 
   private <T> HttpResponse<T> send(

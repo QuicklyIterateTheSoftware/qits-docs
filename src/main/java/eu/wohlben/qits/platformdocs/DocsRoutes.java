@@ -3,6 +3,8 @@ package eu.wohlben.qits.platformdocs;
 import io.vertx.core.Handler;
 import io.vertx.core.http.HttpHeaders;
 import io.vertx.core.http.HttpServerResponse;
+import io.vertx.core.json.JsonArray;
+import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -10,7 +12,9 @@ import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.jboss.logging.Logger;
 
 /**
@@ -158,18 +162,61 @@ public class DocsRoutes {
         : "public, max-age=31536000, immutable";
   }
 
-  /** {@code GET /platform-docs/api/sites} — what is published, for the reader's own index. */
+  /**
+   * {@code GET /platform-docs/api/sites} — the catalog, grouped by scope.
+   *
+   * <p><b>The grouping happens here and nowhere below.</b> The store answers a flat list, because a
+   * scope lives in a site's name and deciding what it groups under is a reading choice — so it is
+   * this service's, and a different reader is free to make a different one.
+   *
+   * <p>A name with no scope goes under the empty group rather than being hidden or invented a home:
+   * a service documenting itself as {@code qits-platform-docs} has no scope and must still be
+   * findable. The client renders that group without a heading.
+   */
   private void sites(RoutingContext rc) {
-    // Deliberately thin for now: the catalog belongs to qits-artifacts, which is the only thing
-    // that
-    // knows what rows exist, and this route is the seam the SPA reads. It is a placeholder only in
-    // the sense that qits-artifacts has no list-every-site endpoint yet — when it does, this
-    // proxies
-    // it and gains no opinion of its own.
-    DocsErrors.send(rc, 501, "the site catalog is not implemented yet");
+    // LinkedHashMap, because the store answers ordered by name and the scopes should come out in
+    // that order too — a catalog that reshuffles between reloads is a catalog nobody trusts.
+    Map<String, JsonArray> byScope = new LinkedHashMap<>();
+    for (DocsUpstream.CatalogEntry entry : upstream.catalog()) {
+      String name = entry.name();
+      int slash = name.startsWith("@") ? name.indexOf('/') : -1;
+      String scope = slash > 0 ? name.substring(0, slash) : "";
+      byScope
+          .computeIfAbsent(scope, s -> new JsonArray())
+          .add(
+              new JsonObject()
+                  .put("name", name)
+                  // What the client puts in the URL after the scope. For an unscoped name it is the
+                  // whole name, which is why this is computed rather than assumed to be a suffix.
+                  .put("shortName", slash > 0 ? name.substring(slash + 1) : name)
+                  .put("versionCount", entry.versionCount())
+                  .put("latestVersion", entry.latestVersion()));
+    }
+    JsonArray scopes = new JsonArray();
+    byScope.forEach(
+        (scope, docs) -> scopes.add(new JsonObject().put("scope", scope).put("docs", docs)));
+    respond(rc, 200, new JsonObject().put("scopes", scopes));
   }
 
   // --- plumbing ---------------------------------------------------------------------------------
+
+  /**
+   * A JSON body, built as a {@code JsonObject} rather than bound from a type.
+   *
+   * <p>A type serialised only inside a Vert.x handler is invisible to the native-image build, so
+   * this stack adds zero reflection configuration — the rule qits-artifacts' four wire packages
+   * follow, and the reason this service needs no {@code @RegisterForReflection} anywhere.
+   */
+  private static void respond(RoutingContext rc, int status, JsonObject body) {
+    byte[] bytes = body.encode().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    rc.response()
+        .setStatusCode(status)
+        .putHeader(HttpHeaders.CONTENT_TYPE, "application/json; charset=utf-8")
+        .putHeader(HttpHeaders.CONTENT_LENGTH, Integer.toString(bytes.length))
+        // The catalog changes whenever anything publishes, so it must not be held.
+        .putHeader(HttpHeaders.CACHE_CONTROL, "no-store")
+        .end(io.vertx.core.buffer.Buffer.buffer(bytes));
+  }
 
   private static void redirect(RoutingContext rc, String location) {
     rc.response()
