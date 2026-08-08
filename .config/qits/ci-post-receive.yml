@@ -1,7 +1,7 @@
 # The pipeline qits-ci runs on every push to a tracked branch of this repository.
 #
 # ONE STEP, and it is the whole of what this repository ships: tests, then a native image pushed to
-# qits-artifacts under $QITS_REGISTRY/$QITS_IMAGE_REPOSITORY/qits-platform-docs:$QITS_CI_SHA — the
+# qits-platform-artifacts under $QITS_REGISTRY/$QITS_IMAGE_REPOSITORY/qits-platform-docs:$QITS_CI_SHA — the
 # tag convention qits-platform-deployments pulls by.
 #
 # `docker: true` is the declared opt-in that mounts the host socket for this step, because building
@@ -60,11 +60,11 @@ steps:
       # and the step's whole job is to drive docker.
       #
       # The suite therefore runs in that stage too (docker/Dockerfile does NOT pass -DskipTests):
-      # it needs no docker, no network and no qits-artifacts, so it costs seconds and a broken route
+      # it needs no docker, no network and no qits-platform-artifacts, so it costs seconds and a broken route
       # grammar fails the build before the native compile rather than after a deploy.
       #
       # `--network qits-net` is what lets the builder stage reach the platform's own registries, the
-      # same flag qits-artifacts' pipeline passes for the same reason.
+      # same flag qits-platform-artifacts' pipeline passes for the same reason.
       ref="$QITS_REGISTRY/$QITS_IMAGE_REPOSITORY/qits-platform-docs:$QITS_CI_SHA"
       docker build --network qits-net -t "$ref" -f docker/Dockerfile .
       docker push "$ref"

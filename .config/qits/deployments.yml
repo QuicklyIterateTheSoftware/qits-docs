@@ -1,7 +1,7 @@
 # How qits-platform-deployments deploys this repo. It reads this file from the git host at
 # the built sha, so the answer travels with the commit.
 #
-# PLATFORM service: it reads the one docs repository in qits-artifacts, which holds what the
+# PLATFORM service: it reads the one docs repository in qits-platform-artifacts, which holds what the
 # whole platform has published. A reader per environment would be two front doors onto one
 # store. It runs in prod and deploys only from prod's branch.
 deployment_target: platform
