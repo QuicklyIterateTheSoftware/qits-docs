@@ -1,18 +1,15 @@
-# How qits-platform-deployments deploys this repo. It reads this file from the git host at the
-# built sha, so the answer travels with the commit rather than living in the deployer's database.
+# How qits-platform-deployments deploys this repo. It reads this file from the git host at
+# the built sha, so the answer travels with the commit.
 #
-# PLATFORM, not environment, and the reason is what this service reads rather than what it is.
-# There is ONE docs repository in qits-artifacts, holding what the whole platform has published; a
-# reader per environment would be two front doors onto one store, disagreeing about nothing useful.
-# Holding no state of its own is what makes that a free choice rather than a constraint — there is
-# no per-environment data here to keep apart.
-#
-# `platform` is the canonical spelling; `singleton` is the accepted alias older files still carry.
+# PLATFORM service: it reads the one docs repository in qits-artifacts, which holds what the
+# whole platform has published. A reader per environment would be two front doors onto one
+# store. It runs in prod and deploys only from prod's branch.
 deployment_target: platform
+deploy_branches: environment/prod
 
-# The default would be /platform-docs/q/health/ready, derived from the name with the qits- prefix
-# dropped — which is exactly right here. It is spelled anyway because the segment is spelled in
-# three other places (DocsPaths.BASE, quarkus.http.non-application-root-path, and
-# QitsService.PLATFORM_DOCS in the gateway) and a reader chasing a failing health gate should find
-# it here too rather than have to know the derivation.
+# The default would be /platform-docs/q/health/ready, derived from the name with the qits-
+# prefix dropped — which is exactly right here. It is spelled anyway because the segment is
+# spelled in three other places (DocsPaths.BASE, quarkus.http.non-application-root-path, and
+# QitsService.PLATFORM_DOCS in the gateway), so a reader chasing a failing health gate finds
+# it here too.
 health_path: /platform-docs/q/health/ready
