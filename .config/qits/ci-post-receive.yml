@@ -36,17 +36,29 @@ steps:
         submodule update --init src/main/webui
 
       cd src/main/webui
-      # npm pins a full resolved URL per package and this lockfile was generated on the deployment
-      # host, so every entry names localhost:8081 — an address that does not exist in this
-      # container. `npm ci` fetches by that URL and never asks the configured registry, so without
-      # this swap the install dies on connection refused. The paths are identical on both
-      # addresses; the integrity hashes are what make replacing only the ORIGIN safe.
-      npm_origin=$(node -p 'new URL(process.env.QITS_NPM_PROXY_URL).origin')
-      sed -i -E "s#(\"resolved\": \")https?://[^/\"]+#\1$npm_origin#" package-lock.json
+      # THE LOCKFILE, RETARGETED. npm pins an absolute `resolved` URL per package and this lockfile
+      # was generated on the deployment host, so every entry names a localhost port — an address
+      # that does not exist in this container. `npm ci` fetches by that URL and never asks the
+      # configured registry, so without this swap the install dies on connection refused. The byte
+      # plane is TWO SERVICES since the split — qits-platform-mirror holds the npmjs pull-through
+      # cache, qits-artifacts hosts the @qits scope — so no single origin serves both and the PATH
+      # is what tells them apart: an entry under the hosted registry's own pathname
+      # ($QITS_NPM_REGISTRY_URL's, /artifacts/npm/npm/) gets the hosted origin and everything else
+      # gets the proxy's. sed applies -e in sequence, so the broad swap runs first and the narrow
+      # path-anchored one corrects the @qits entries after it. The integrity hashes are what make
+      # replacing only the ORIGIN safe.
+      npm_hosted_origin=$(node -p 'new URL(process.env.QITS_NPM_REGISTRY_URL).origin')
+      npm_proxy_origin=$(node -p 'new URL(process.env.QITS_NPM_PROXY_URL).origin')
+      npm_hosted_path=$(node -p 'new URL(process.env.QITS_NPM_REGISTRY_URL).pathname')
+      sed -i -E \
+        -e "s#(\"resolved\": \")https?://[^/\"]+#\1$npm_proxy_origin#" \
+        -e "s#(\"resolved\": \")https?://[^/\"]+($npm_hosted_path)#\1$npm_hosted_origin\2#" \
+        package-lock.json
 
-      # ENVIRONMENT, not a file: this repo COMMITS an .npmrc naming localhost:8081 (right for a
-      # developer on the host), and npm ranks a project .npmrc ABOVE ~/.npmrc — so a `cat >
-      # ~/.npmrc` preamble would be written and silently ignored. npm_config_* outranks both.
+      # ENVIRONMENT, not a file: this repo COMMITS an .npmrc naming localhost:8081 for @qits and
+      # localhost:8082 for npmjs (right for a developer on the host), and npm ranks a project .npmrc
+      # ABOVE ~/.npmrc — so a `cat > ~/.npmrc` preamble would be written and silently ignored.
+      # npm_config_* outranks both.
       env npm_config_registry="$QITS_NPM_PROXY_URL" \
           "npm_config_@qits:registry=$QITS_NPM_REGISTRY_URL" \
           npm ci --no-audit --no-fund
