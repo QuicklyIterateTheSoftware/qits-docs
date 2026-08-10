@@ -1,4 +1,4 @@
-[submodule "qits-platform-spa-docs"]
+[submodule "qits-spa-docs"]
 	path = src/main/webui
 	url = https://github.com/QuicklyIterateTheSoftware/qits-platform-spa-docs.git
 	ignore = all

@@ -7,14 +7,15 @@
 # (`qits.workspaces.release.entry-branch`). `deploy_branches` used to name that branch here, in
 # thirteen copies of one platform-wide answer, and a release pushed onto every entry it named.
 #
-# PLATFORM service: it reads the one docs repository in qits-platform-artifacts, which holds what the
-# whole platform has published. A reader per environment would be two front doors onto one
-# store. It deploys from the PLATFORM ENVIRONMENT's branch and no other tier's.
-deployment_target: platform
+# ENVIRONMENT service: it reads the docs repository of its OWN environment's qits-artifacts. It
+# was platform-scoped only because qits-artifacts was, and the byte-plane split ended that: the
+# store is an environment service again, so a reader per environment is one front door per store,
+# not two onto one.
+deployment_target: environment
 
-# The default would be /platform-docs/q/health/ready, derived from the name with the qits-
+# The default would be /docs/q/health/ready, derived from the name with the qits-
 # prefix dropped — which is exactly right here. It is spelled anyway because the segment is
 # spelled in three other places (DocsPaths.BASE, quarkus.http.non-application-root-path, and
-# QitsService.PLATFORM_DOCS in the gateway), so a reader chasing a failing health gate finds
+# QitsService.DOCS in the gateway), so a reader chasing a failing health gate finds
 # it here too.
-health_path: /platform-docs/q/health/ready
+health_path: /docs/q/health/ready

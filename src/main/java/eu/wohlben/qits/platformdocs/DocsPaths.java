@@ -1,7 +1,7 @@
 package eu.wohlben.qits.platformdocs;
 
 /**
- * The route grammar for {@code /platform-docs}.
+ * The route grammar for {@code /docs}.
  *
  * <p><b>It is deliberately the same grammar qits-artifacts serves under {@code /artifacts/docs}</b>
  * — the {@code /-/} separator between a multi-segment site name and its version, and the same
@@ -33,7 +33,7 @@ final class DocsPaths {
    * key moves it, because {@code qits-gateway} routes verbatim by prefix and this segment is
    * derived from this repository's own name.
    */
-  static final String BASE = "/platform-docs";
+  static final String BASE = "/docs";
 
   /**
    * One component of a site name. The leading {@code @} is optional and the character after it is
@@ -43,10 +43,10 @@ final class DocsPaths {
   private static final String SEGMENT = "(?:@?[A-Za-z0-9][A-Za-z0-9._~-]{0,127})";
 
   /**
-   * The prefixes a site name may never claim: Quarkus' non-application root ({@code
-   * /platform-docs/q/**}, where health lives), this service's own {@code /platform-docs/api/**},
-   * and {@code /platform-docs/read/**} — the client's reader page, which wraps a bundle in a rail
-   * carrying the version picker and therefore has to reach the SPA rather than this wire.
+   * The prefixes a site name may never claim: Quarkus' non-application root ({@code /docs/q/**},
+   * where health lives), this service's own {@code /docs/api/**}, and {@code /docs/read/**} — the
+   * client's reader page, which wraps a bundle in a rail carrying the version picker and therefore
+   * has to reach the SPA rather than this wire.
    *
    * <p><b>This is structural on purpose rather than a matter of route order.</b> Both are ordinary
    * site names as far as the character classes are concerned — {@code q/health/ready} is three
@@ -70,21 +70,19 @@ final class DocsPaths {
 
   private static final String PATH = "(?<path>.+)";
 
-  /** {@code /platform-docs/<site>/} — the newest version, as a redirect. */
+  /** {@code /docs/<site>/} — the newest version, as a redirect. */
   static final String SITE_LATEST = route(NAME + "/");
 
-  /** {@code /platform-docs/<site>} — the same, without the slash. Also a redirect. */
+  /** {@code /docs/<site>} — the same, without the slash. Also a redirect. */
   static final String SITE = route(NAME);
 
-  /**
-   * {@code /platform-docs/<site>/-/<version>} — a version root, redirected to its directory form.
-   */
+  /** {@code /docs/<site>/-/<version>} — a version root, redirected to its directory form. */
   static final String VERSION_ROOT = route(NAME + "/-/" + VERSION);
 
-  /** {@code /platform-docs/<site>/-/<version>/} — the directory form, which serves the index. */
+  /** {@code /docs/<site>/-/<version>/} — the directory form, which serves the index. */
   static final String VERSION_INDEX = route(NAME + "/-/" + VERSION + "/");
 
-  /** {@code /platform-docs/<site>/-/<version>/<path>} — one file. */
+  /** {@code /docs/<site>/-/<version>/<path>} — one file. */
   static final String FILE = route(NAME + "/-/" + VERSION + "/" + PATH);
 
   /**

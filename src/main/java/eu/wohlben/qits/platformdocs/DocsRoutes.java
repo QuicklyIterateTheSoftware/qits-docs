@@ -17,7 +17,7 @@ import java.util.Map;
 import org.jboss.logging.Logger;
 
 /**
- * The reading surface, at {@code /platform-docs}.
+ * The reading surface, at {@code /docs}.
  *
  * <p>Four routes and one idea: turn a URL a person can hold in their head into a version-addressed
  * one, then stream the file qits-artifacts has under it.
@@ -27,18 +27,17 @@ import org.jboss.logging.Logger;
  * <em>relatively</em> — Storybook emits {@code ./assets/…} — so what a browser has to end up on is
  * a directory URL, or every asset resolves one level too high and 404s. Serving content at {@code
  * …/2026.807.0} instead of redirecting to {@code …/2026.807.0/} would produce a page that loads and
- * is then blank, which is the failure mode hardest to read. So {@code /platform-docs/<site>} and
- * {@code …/-/<version>} both answer 302 and nothing else.
+ * is then blank, which is the failure mode hardest to read. So {@code /docs/<site>} and {@code
+ * …/-/<version>} both answer 302 and nothing else.
  *
  * <p><b>{@code latest} is a query, not a pointer.</b> There is no alias table here and no state at
  * all: the newest version is the first element of qits-artifacts' own version list, read on every
  * request. That is what lets a redeploy of this service lose nothing and a published version become
  * the latest the instant it lands.
  *
- * <p>The redirect to a version is <b>302, deliberately, not 301</b>. What {@code
- * /platform-docs/<site>/} means changes with every release, so a permanent redirect would pin a
- * reader's browser to whatever version was newest the first time they visited, for as long as their
- * cache lives.
+ * <p>The redirect to a version is <b>302, deliberately, not 301</b>. What {@code /docs/<site>/}
+ * means changes with every release, so a permanent redirect would pin a reader's browser to
+ * whatever version was newest the first time they visited, for as long as their cache lives.
  *
  * <p><b>Raw Vert.x routes, and responses built as bytes or headers.</b> Nothing here is serialised
  * by binding, so this stack adds zero native-image configuration — the rule qits-artifacts' four
@@ -116,7 +115,7 @@ public class DocsRoutes {
   // --- reading ----------------------------------------------------------------------------------
 
   /**
-   * {@code GET /platform-docs/<site>[/]} — 302 to the <b>reader</b>, not to the bundle.
+   * {@code GET /docs/<site>[/]} — 302 to the <b>reader</b>, not to the bundle.
    *
    * <p><b>This is the human entry point, so it must land somewhere with the version picker on
    * it.</b> It used to redirect straight to the newest bundle directory, which served a
@@ -131,7 +130,7 @@ public class DocsRoutes {
    */
   private void latest(RoutingContext rc) {
     String site = rc.pathParam("name");
-    // A SINGLE segment beginning with @ is a scope, not a site — /platform-docs/@qits is the index
+    // A SINGLE segment beginning with @ is a scope, not a site — /docs/@qits is the index
     // of what @qits publishes, and the client owns that page. Falling through hands it to Quinoa's
     // SPA route, which is registered after these; answering 404 here would make every scope page a
     // dead link, and answering the SPA here would put a second renderer in this service.
@@ -149,7 +148,7 @@ public class DocsRoutes {
   }
 
   /**
-   * {@code GET /platform-docs/<site>/-/<version>} — 302 to the same path with a trailing slash.
+   * {@code GET /docs/<site>/-/<version>} — 302 to the same path with a trailing slash.
    *
    * <p>The whole of this route is that slash, and it is load-bearing: see the class javadoc. The
    * version is not checked to exist first, because the redirect target answers that itself and
@@ -159,12 +158,12 @@ public class DocsRoutes {
     redirect(rc, rc.normalizedPath() + "/");
   }
 
-  /** {@code GET /platform-docs/<site>/-/<version>/} — the bundle's own entry point. */
+  /** {@code GET /docs/<site>/-/<version>/} — the bundle's own entry point. */
   private void index(RoutingContext rc) {
     stream(rc, rc.pathParam("name"), rc.pathParam("version"), INDEX);
   }
 
-  /** {@code GET /platform-docs/<site>/-/<version>/<path>} — one file. */
+  /** {@code GET /docs/<site>/-/<version>/<path>} — one file. */
   private void file(RoutingContext rc) {
     stream(rc, rc.pathParam("name"), rc.pathParam("version"), rc.pathParam("path"));
   }
@@ -225,15 +224,15 @@ public class DocsRoutes {
   }
 
   /**
-   * {@code GET /platform-docs/api/sites} — the catalog, grouped by scope.
+   * {@code GET /docs/api/sites} — the catalog, grouped by scope.
    *
    * <p><b>The grouping happens here and nowhere below.</b> The store answers a flat list, because a
    * scope lives in a site's name and deciding what it groups under is a reading choice — so it is
    * this service's, and a different reader is free to make a different one.
    *
    * <p>A name with no scope goes under the empty group rather than being hidden or invented a home:
-   * a service documenting itself as {@code qits-platform-docs} has no scope and must still be
-   * findable. The client renders that group without a heading.
+   * a service documenting itself as {@code qits-docs} has no scope and must still be findable. The
+   * client renders that group without a heading.
    */
   private void sites(RoutingContext rc) {
     // LinkedHashMap, because the store answers ordered by name and the scopes should come out in
@@ -261,13 +260,13 @@ public class DocsRoutes {
   }
 
   /**
-   * {@code GET /platform-docs/api/versions?site=<name>} — every published version, newest first.
+   * {@code GET /docs/api/versions?site=<name>} — every published version, newest first.
    *
    * <p><b>A query parameter rather than a path segment</b>, and that is forced rather than chosen:
    * a site name carries slashes and usually a leading {@code @}, so {@code
    * /api/versions/@qits/ui-…} would need the same {@code /-/} grammar the reading routes use — for
    * a machine surface where nobody is reading the URL. The reading spelling of the same question is
-   * {@code /platform-docs/<site>}, which answers a redirect because that is what a browser wants.
+   * {@code /docs/<site>}, which answers a redirect because that is what a browser wants.
    */
   private void apiVersions(RoutingContext rc) {
     String site = rc.request().getParam("site");

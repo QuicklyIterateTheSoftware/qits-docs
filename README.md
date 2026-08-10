@@ -1,8 +1,11 @@
-# qits-platform-docs
+# qits-docs
 
-**The platform's reading room.** One address where every documentation site the platform has
-published can be read — `/platform-docs/@qits/ui-components/` and you are looking at the newest
-release's workbench.
+**The environment's reading room.** One address where every documentation site published into this
+environment can be read — `/docs/@qits/ui-components/` and you are looking at the newest release's
+workbench.
+
+An **environment service**: it is deployed once per environment and reads that environment's own
+`qits-artifacts`. It was platform-scoped only because the store was.
 
 A small, stateless Quarkus 3 (Java 25) application that compiles to a **GraalVM native binary**. It
 has no database, no ORM, no cache and no state of its own: it resolves a readable URL to a
@@ -10,7 +13,7 @@ version-addressed one and streams the bytes qits-artifacts holds.
 
     ./mvnw verify                                  # no docker, no network, no qits-artifacts
     ./mvnw package && java -jar target/quarkus-app/quarkus-run.jar
-    ./mvnw verify -Dnative && ./target/qits-platform-docs
+    ./mvnw verify -Dnative && ./target/qits-docs
 
 ## Why this exists rather than a path on qits-artifacts
 
@@ -28,13 +31,13 @@ this process adds is a redirect or a header, and the section below is the whole 
 
 | Route | What it does |
 | --- | --- |
-| `GET /platform-docs/<site>` | 302 → the newest version's directory |
-| `GET /platform-docs/<site>/` | the same |
-| `GET /platform-docs/<site>/-/<version>` | 302 → the same path **with a trailing slash** |
-| `GET /platform-docs/<site>/-/<version>/` | the bundle's `index.html` |
-| `GET /platform-docs/<site>/-/<version>/<path>` | one file, streamed |
-| `GET /platform-docs/api/sites` | the catalog, grouped by scope |
-| `GET /platform-docs/api/versions?site=<name>` | one site's versions, newest first |
+| `GET /docs/<site>` | 302 → the newest version's directory |
+| `GET /docs/<site>/` | the same |
+| `GET /docs/<site>/-/<version>` | 302 → the same path **with a trailing slash** |
+| `GET /docs/<site>/-/<version>/` | the bundle's `index.html` |
+| `GET /docs/<site>/-/<version>/<path>` | one file, streamed |
+| `GET /docs/api/sites` | the catalog, grouped by scope |
+| `GET /docs/api/versions?site=<name>` | one site's versions, newest first |
 
 A `<site>` is whatever namespacing the publishing project already uses: `@qits/ui-components` where
 there is an npm package, `someproject/somelib` where there is not, up to four segments deep. The
@@ -60,7 +63,7 @@ first element of qits-artifacts' own version list, read on every request. Two th
 both are the reason it is done this way: a release becomes the latest the instant its publish
 lands, and a redeploy of this service loses nothing because there was nothing to lose.
 
-The redirect is **302, not 301**. What `/platform-docs/<site>/` means changes with every release, so
+The redirect is **302, not 301**. What `/docs/<site>/` means changes with every release, so
 a permanent redirect would pin a reader's browser to whatever was newest the first time they
 visited, for as long as their cache lived.
 
@@ -87,9 +90,9 @@ most expensive wrong answer a component in the middle can give.
 
 | Key | Default | What |
 | --- | --- | --- |
-| `qits.platform-docs.artifacts-url` | `http://qits-artifacts:8080/artifacts/docs/docs` | the store, **including** its repository segment |
-| `qits.platform-docs.connect-timeout` | `PT2S` | |
-| `qits.platform-docs.request-timeout` | `PT30S` | bounds the response *head*, not the transfer |
+| `qits.docs.artifacts-url` | `http://dev-qits-artifacts:8080/artifacts/docs/docs` | the store, **including** its repository segment |
+| `qits.docs.connect-timeout` | `PT2S` | |
+| `qits.docs.request-timeout` | `PT30S` | bounds the response *head*, not the transfer |
 
 The artifacts URL is the same value qits-ci injects into a publishing step as `$QITS_DOCS_URL`, and
 that is deliberate: a deployment configures one address, and the publisher and the reader cannot
@@ -101,12 +104,12 @@ dials it from inside `qits-net`, so a host-published mapping (a local stack's `l
 
 ## Deployment
 
-One published port, fronted by qits-gateway, which routes `/platform-docs/*` here verbatim and
+One published port, fronted by qits-gateway, which routes `/docs/*` here verbatim and
 rewrites nothing — there is no unprefixed spelling, on `qits-net` either. The segment comes from
-`QitsService.PLATFORM_DOCS`, derived from this repository's name; it is a literal in `DocsPaths` and
+`QitsService.DOCS`, derived from this repository's name; it is a literal in `DocsPaths` and
 no config key moves it.
 
-Readiness is the stock `/platform-docs/q/health/ready`, and it is stock **deliberately**: this
+Readiness is the stock `/docs/q/health/ready`, and it is stock **deliberately**: this
 service has no state whose health could differ from "the process is up", and a check that dialled
 qits-artifacts would take this container down for an outage it is designed to survive by answering
 502.
@@ -120,12 +123,12 @@ qits-artifacts would take this container down for an outage it is designed to su
 
 ## The client
 
-`src/main/webui` is the [qits-platform-spa-docs](https://github.com/QuicklyIterateTheSoftware/qits-platform-spa-docs)
+`src/main/webui` is the [qits-spa-docs](https://github.com/QuicklyIterateTheSoftware/qits-spa-docs)
 submodule, built and served by Quinoa. Three layers over the same store:
 
-    /platform-docs/                          what publishes documentation, by scope
-    /platform-docs/@qits                     what that scope publishes
-    /platform-docs/read/<site>/-/<version>   one bundle, with a version picker beside it
+    /docs/                          what publishes documentation, by scope
+    /docs/@qits                     what that scope publishes
+    /docs/read/<site>/-/<version>   one bundle, with a version picker beside it
 
 **The reader shows two navigations side by side, and that is the arrangement.** A bundle is a whole
 application — Storybook ships its own full-height sidebar — so the client cannot put the version
@@ -139,7 +142,7 @@ the rest to an `<iframe>`.
 > gone. At or past 40 000 the fallback answers bundle paths with `index.html` instead. Both numbers
 > are read off the Quinoa jar and are not API; re-check them when the pin moves.
 
-`/platform-docs/@qits` is the one path this service **declines**: a single segment beginning with
+`/docs/@qits` is the one path this service **declines**: a single segment beginning with
 `@` is a scope, and `latest()` calls `next()` so Quinoa's fallback serves the client. `read/` is
 reserved out of the site grammar for the same reason, beside `q/` and `api/`.
 

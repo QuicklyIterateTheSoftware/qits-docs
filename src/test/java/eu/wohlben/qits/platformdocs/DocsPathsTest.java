@@ -21,18 +21,15 @@ class DocsPathsTest {
 
   @Test
   void aSiteNameMayBeScopedOrNested() {
-    assertEquals(
-        "@qits/ui-components", group(DocsPaths.SITE, "/platform-docs/@qits/ui-components", "name"));
-    assertEquals("ui-components", group(DocsPaths.SITE, "/platform-docs/ui-components", "name"));
-    assertEquals(
-        "someproject/somelib", group(DocsPaths.SITE, "/platform-docs/someproject/somelib", "name"));
-    assertFalse(
-        matches(DocsPaths.SITE, "/platform-docs/a/b/c/d/e"), "five segments is past the cap");
+    assertEquals("@qits/ui-components", group(DocsPaths.SITE, "/docs/@qits/ui-components", "name"));
+    assertEquals("ui-components", group(DocsPaths.SITE, "/docs/ui-components", "name"));
+    assertEquals("someproject/somelib", group(DocsPaths.SITE, "/docs/someproject/somelib", "name"));
+    assertFalse(matches(DocsPaths.SITE, "/docs/a/b/c/d/e"), "five segments is past the cap");
   }
 
   @Test
   void aVersionPathSplitsIntoNameAndVersion() {
-    String root = "/platform-docs/@qits/ui-components/-/2026.807.0";
+    String root = "/docs/@qits/ui-components/-/2026.807.0";
     assertEquals("@qits/ui-components", group(DocsPaths.VERSION_ROOT, root, "name"));
     assertEquals("2026.807.0", group(DocsPaths.VERSION_ROOT, root, "version"));
 
@@ -43,7 +40,7 @@ class DocsPathsTest {
 
   @Test
   void theReadingSpellingsDoNotOverlap() {
-    String site = "/platform-docs/@qits/ui-components";
+    String site = "/docs/@qits/ui-components";
     String siteSlash = site + "/";
     String root = site + "/-/2026.807.0";
     String rootSlash = root + "/";
@@ -80,19 +77,19 @@ class DocsPathsTest {
     // and two perfectly valid name segments, so without the reserved-prefix lookahead the site
     // routes swallow both — a readiness probe would resolve as a site called `q/health/ready`,
     // answer 404, and the deployment's health gate would never go green against a healthy process.
-    assertFalse(matches(DocsPaths.SITE, "/platform-docs/q/health/ready"));
-    assertFalse(matches(DocsPaths.SITE, "/platform-docs/q/health/live"));
-    assertFalse(matches(DocsPaths.SITE_LATEST, "/platform-docs/q/metrics/"));
-    assertFalse(matches(DocsPaths.SITE, "/platform-docs/api/sites"));
-    assertFalse(matches(DocsPaths.SITE, "/platform-docs/read/@qits/ui-components"));
-    assertFalse(matches(DocsPaths.FILE, "/platform-docs/read/x/-/1.0.0/i.html"));
-    assertFalse(matches(DocsPaths.FILE, "/platform-docs/q/health/-/1.0.0/x"));
+    assertFalse(matches(DocsPaths.SITE, "/docs/q/health/ready"));
+    assertFalse(matches(DocsPaths.SITE, "/docs/q/health/live"));
+    assertFalse(matches(DocsPaths.SITE_LATEST, "/docs/q/metrics/"));
+    assertFalse(matches(DocsPaths.SITE, "/docs/api/sites"));
+    assertFalse(matches(DocsPaths.SITE, "/docs/read/@qits/ui-components"));
+    assertFalse(matches(DocsPaths.FILE, "/docs/read/x/-/1.0.0/i.html"));
+    assertFalse(matches(DocsPaths.FILE, "/docs/q/health/-/1.0.0/x"));
 
     // The reservation is exactly two prefixes and does not leak into ordinary names.
-    assertTrue(matches(DocsPaths.SITE, "/platform-docs/quarkus-things"), "q is not a prefix of q/");
-    assertTrue(matches(DocsPaths.SITE, "/platform-docs/apiary"));
-    assertTrue(matches(DocsPaths.SITE, "/platform-docs/readme"), "read is not a prefix of read/");
-    assertTrue(matches(DocsPaths.SITE, "/platform-docs/@qits/api"), "reserved only at the root");
+    assertTrue(matches(DocsPaths.SITE, "/docs/quarkus-things"), "q is not a prefix of q/");
+    assertTrue(matches(DocsPaths.SITE, "/docs/apiary"));
+    assertTrue(matches(DocsPaths.SITE, "/docs/readme"), "read is not a prefix of read/");
+    assertTrue(matches(DocsPaths.SITE, "/docs/@qits/api"), "reserved only at the root");
   }
 
   @Test

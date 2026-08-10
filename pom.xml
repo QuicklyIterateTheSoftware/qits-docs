@@ -5,17 +5,17 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>eu.wohlben</groupId>
-    <artifactId>qits-platform-docs</artifactId>
+    <artifactId>qits-docs</artifactId>
     <version>2026.809.161652</version>
     <packaging>quarkus</packaging>
 
-    <name>qits-platform-docs</name>
+    <name>qits-docs</name>
     <description>The reading surface over the documentation sites qits-artifacts holds: readable
         URLs, `latest` resolved by query, and the bytes streamed through. Holds no state of its own.
     </description>
 
     <!-- DELIBERATELY PARENT-LESS, the rule qits-gateway states: this repository lives on its own
-         (github.com/QuicklyIterateTheSoftware/qits-platform-docs) and the qits monorepo consumes it
+         (github.com/QuicklyIterateTheSoftware/qits-docs) and the qits monorepo consumes it
          as a git submodule, but it is NOT a module of qits' Maven reactor. A clone of this repo
          alone must build. Versions that have to stay in step with the platform (the Quarkus
          platform, the JDK release) are duplicated here on purpose. -->
@@ -75,7 +75,7 @@
             <artifactId>quarkus-vertx-http</artifactId>
         </dependency>
         <dependency>
-            <!-- /platform-docs/q/health/{live,ready} — the readiness endpoint the deployment's
+            <!-- /docs/q/health/{live,ready} — the readiness endpoint the deployment's
                  health gate curls, the convention every qits service answers. -->
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-smallrye-health</artifactId>
@@ -89,7 +89,7 @@
         </dependency>
 
         <dependency>
-            <!-- The client. Quinoa builds src/main/webui (the qits-platform-spa-docs submodule)
+            <!-- The client. Quinoa builds src/main/webui (the qits-spa-docs submodule)
                  during augmentation and registers the bundle as build-time static resources, so
                  there is no runtime machinery and no second process — the reading room is served
                  by the same binary that streams the bundles it links to.

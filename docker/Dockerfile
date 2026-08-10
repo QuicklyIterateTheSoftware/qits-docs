@@ -1,18 +1,18 @@
-# qits-platform-docs as a GraalVM-native container IMAGE — the platform's two-stage shape: a Mandrel
+# qits-docs as a GraalVM-native container IMAGE — the platform's two-stage shape: a Mandrel
 # builder stage compiles the binary, a minimal runtime stage carries only it.
 #
 # This file is not how the binary is built; it is how the binary is SHIPPED. `.sdkmanrc` names a
 # GraalVM (25.0.2-graalce), so `sdk env && ./mvnw package -Dnative` produces
-# target/qits-platform-docs locally with no container involved. What this adds is the image around
+# target/qits-docs locally with no container involved. What this adds is the image around
 # it — and, incidentally, a way for a machine with no GraalVM to still get a binary, since the
 # builder stage brings its own native-image.
 #
 # Build from the repo root:
 #
-#     docker build -t qits/platform-docs:latest -f docker/Dockerfile .
+#     docker build -t qits/qits-docs:latest -f docker/Dockerfile .
 #
 # THE CLIENT IS BUILT BEFORE THIS IMAGE, NOT IN IT — qits-gateway's deviation from the platform's
-# Quinoa recipe, for its reason exactly. src/main/webui is qits-platform-spa-docs and it depends on
+# Quinoa recipe, for its reason exactly. src/main/webui is qits-spa-docs and it depends on
 # @qits/ui-components, which exists ONLY on the platform's own npm registry. A RUN step in a docker
 # build reaches the public internet and can reach that registry by NO address: not the qits-net
 # alias, not localhost:8081, not host.docker.internal. So the install happens where it can — the CI
@@ -60,7 +60,7 @@ COPY . .
 # The `test -f` stops a context with no bundle before the multi-minute native compile. A forgotten
 # `npm run build` in the CI step is then a red build rather than a service that ships without its
 # reading room.
-RUN d=src/main/webui/dist/qits-platform-spa-docs/browser; \
+RUN d=src/main/webui/dist/qits-spa-docs/browser; \
     test -f "$d/index.html" || { \
       echo "No built client at $d." >&2; \
       echo "The build context must carry one: run 'npm ci && npm run build'" >&2; \
@@ -79,14 +79,14 @@ RUN d=src/main/webui/dist/qits-platform-spa-docs/browser; \
 FROM localhost:8081/redhat/ubi9/ubi-minimal:9.6
 WORKDIR /work
 
-# `quarkus.package.output-name` names the binary `qits-platform-docs` (no -runner suffix), so the
+# `quarkus.package.output-name` names the binary `qits-docs` (no -runner suffix), so the
 # process is identifiable in `ps`/`docker top`.
-COPY --from=build --chown=1001:root /src/target/qits-platform-docs /work/qits-platform-docs
-RUN chmod +x /work/qits-platform-docs
+COPY --from=build --chown=1001:root /src/target/qits-docs /work/qits-docs
+RUN chmod +x /work/qits-docs
 
 EXPOSE 8080
 USER 1001
 
-# The one address this service needs is configuration: QITS_PLATFORM_DOCS_ARTIFACTS_URL. Its default
+# The one address this service needs is configuration: QITS_DOCS_ARTIFACTS_URL. Its default
 # is the qits-net alias and is right for an ordinary deployment — see README.md.
-ENTRYPOINT ["/work/qits-platform-docs", "-Dquarkus.http.host=0.0.0.0"]
+ENTRYPOINT ["/work/qits-docs", "-Dquarkus.http.host=0.0.0.0"]

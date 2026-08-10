@@ -44,7 +44,7 @@ public class DocsUpstream {
    * injects into a publishing step as {@code $QITS_DOCS_URL}, so a deployment configures one
    * address and the publisher and the reader agree by construction.
    */
-  @ConfigProperty(name = "qits.platform-docs.artifacts-url")
+  @ConfigProperty(name = "qits.docs.artifacts-url")
   String artifactsUrl;
 
   /**
@@ -52,10 +52,10 @@ public class DocsUpstream {
    * deadline bounds the <em>response head</em> and not the transfer — a ten-megabyte bundle over
    * qits-net must not be a timeout, and an unreachable qits-artifacts must not be a hung request.
    */
-  @ConfigProperty(name = "qits.platform-docs.connect-timeout", defaultValue = "PT2S")
+  @ConfigProperty(name = "qits.docs.connect-timeout", defaultValue = "PT2S")
   Duration connectTimeout;
 
-  @ConfigProperty(name = "qits.platform-docs.request-timeout", defaultValue = "PT30S")
+  @ConfigProperty(name = "qits.docs.request-timeout", defaultValue = "PT30S")
   Duration requestTimeout;
 
   private HttpClient http;
