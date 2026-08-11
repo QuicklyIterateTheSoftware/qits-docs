@@ -8,11 +8,10 @@
 # and pushing an image is what it is for. It is root-equivalent on the host and is declared here
 # where a diff shows it — see qits-ci's AGENTS.md on the untrusted-input posture.
 #
-# NOTE WHAT IS ABSENT compared with qits-gateway's pipeline, which this otherwise mirrors: there is
-# no submodule init and no `npm ci && npm run build` prelude, because this service carries no webui
-# yet. `qits-spa-docs` is the index UI and is not wired in. The day it is, this step grows
-# the same prelude for the same reason — the @qits scope is reachable from qits-net and from no
-# address a docker build has, so the bundle must be built HERE and arrive in the build context.
+# THE CLIENT PRELUDE IS PRESENT, the same one qits-gateway's pipeline carries: this step inits the
+# `qits-spa-docs` submodule and runs `npm ci && npm run build` before the image build. The @qits
+# scope is reachable from qits-net and from no address a docker build has, so the bundle must be
+# built HERE and arrive in the build context.
 #
 # The image is built by docker/Dockerfile's Mandrel builder stage rather than by this container:
 # node-docker-base carries no GraalVM, and the builder stage brings its own native-image.
@@ -75,9 +74,18 @@ steps:
       # it needs no docker, no network and no qits-artifacts, so it costs seconds and a broken route
       # grammar fails the build before the native compile rather than after a deploy.
       #
-      # `--network qits-net` is what lets the builder stage reach the platform's own registries, the
-      # same flag qits-artifacts' pipeline passes for the same reason.
+      # NO `--network` FLAG, and that is a fact about this build rather than an omission: nothing it
+      # runs wants the platform's own network. The pom declares no qits dependency and no qits-maven
+      # repository, so Maven resolves from Central; Quinoa's install and build commands are replaced
+      # by `--version`, so no npm registry is read; and the `localhost:8082` base images are pulled
+      # by the DAEMON, which runs on the host, not by the build's network namespace. Default
+      # networking gives the RUN steps the public internet, which is all they ask for.
+      #
+      # This line used to pass `--network qits-net`, and that had to go either way: buildkit refuses
+      # a custom network, and the platform targets buildkit because a swarm cannot assume the legacy
+      # builder. A sibling that DOES need the platform registry takes `--network host` instead —
+      # see qits-githost f5ae4bb.
       ref="$QITS_REGISTRY/$QITS_IMAGE_REPOSITORY/qits-docs:$QITS_CI_SHA"
-      docker build --network qits-net -t "$ref" -f docker/Dockerfile .
+      docker build -t "$ref" -f docker/Dockerfile .
       docker push "$ref"
       docker rmi "$ref" || true
