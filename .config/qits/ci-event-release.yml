@@ -1,0 +1,107 @@
+# The release pipeline: this repository reacts to its OWN release and pushes the image under the
+# released VERSION. qits-events' file, adapted to this repository's build — see that repository for
+# the long form of each rule; the short form of the ones that bite:
+#
+# - THE SELECTION NAMING THIS REPOSITORY IS NOT A LOOP. `SCMRelease` says only "source control has
+#   this version" and qits-workspaces publishes it; nothing in this file publishes it. The event
+#   that could loop is SoftwareRelease, and this file neither listens for it nor publishes it.
+# - THE VERSION TAG IS A NEW COORDINATE BESIDE THE SHA. ci-post-receive.yml's `:$QITS_CI_SHA` push
+#   is the whole contract with qits-platform-deployments and is untouched; every deployment still
+#   comes from a sha. What this adds is a name a human and a downstream consumer can say out loud,
+#   on the same image content.
+# - `artifacts:` IS A DECLARATION, NOT A REPORT. qits-ci never learns how to publish anything, so
+#   it cannot see what the step pushed; it announces on the strength of the line below. One entry,
+#   because this pipeline pushes one image and this repository publishes no jar.
+# - THE NAME IS UNQUALIFIED ON PURPOSE — the registry is `qits-platform-artifacts:8080` inside a
+#   step container and `localhost:8081` outside, and an OCI reference cannot carry a path prefix.
+#   The reader supplies its own host, exactly as the push below composes one from environment.
+# - THE BUILD BELOW IS ci-post-receive.yml's, AND THE TWO MUST STAY MATCHED. That file is where the
+#   client prelude, the lockfile origin swap, the `npm_config_*` environment and the absence of a
+#   `--network` flag are explained at length; this one carries the short form and points there
+#   rather than keeping a second copy of the reasoning to drift.
+# - THIS FILE IS INERT UNTIL an SCMRelease for this repository exists, and it lands first on
+#   purpose: the bus is at-most-once with no catch-up and no replay, so a trigger file must be in
+#   place before the event it selects. The other order loses a release and looks like a train that
+#   quietly did not roll.
+event: SCMRelease
+when:
+  - repository: { exact: qits-docs }
+artifacts:
+  - { type: docker, name: qits/qits-docs }
+steps:
+    # node-docker-base, the image ci-post-receive.yml already uses: node, npm and git for half one,
+    # the docker CLI for half two — and node is also what reads the event payload, which is JSON.
+  - image: qits/build-images/node-docker-base:latest
+    docker: true
+    timeout-seconds: 3600
+    script: |
+      # The daemon runs this with `bash -c` and no -e, so without this an early failure would be
+      # swallowed by the next command's exit code — and a green release run is what makes qits-ci
+      # announce the artifact, so it has to mean the image really was built and pushed. -u makes an
+      # unset registry variable stop the step too.
+      set -eu
+
+      # THE EVENT, READ AS DATA. The payload reaches the container verbatim as one string in
+      # $QITS_EVENT_PAYLOAD; there is no per-field projection.
+      version=$(node -p 'JSON.parse(process.env.QITS_EVENT_PAYLOAD).version')
+      # The version reaches a `sed` s### expression below, and `#` is that expression's own
+      # delimiter — a version carrying one closes it, and GNU sed's `e` command then runs a shell.
+      # Refused rather than quoted: a version here is a calver or a semver, and nothing legitimate
+      # needs a character outside this set.
+      case "$version" in
+        ''|*[!0-9A-Za-z._+-]*) echo "refusing an implausible version: $version" >&2; exit 1 ;;
+      esac
+      echo "releasing qits/qits-docs:$version"
+
+      # THE TAG IS THE CHECKOUT TARGET, and it is the only reason this run needs one. An
+      # event-triggered run is cloned at the head of main, which is where the release commit is
+      # *now* — a later push moves that, and the tag does not, so a busy main cannot make this
+      # pipeline ship a different tree than the one that was released. The clone is shallow and
+      # carries no tags, hence the explicit refspec; the URL rather than `origin` because every
+      # address a step needs arrives as environment. `checkout --detach` peels the annotated tag to
+      # its commit — and it is what makes the submodule fetch below land on the qits-spa-docs
+      # gitlink the release recorded rather than on main's.
+      git fetch "$QITS_CI_REPOSITORY_URL" "refs/tags/$version:refs/tags/$version"
+      git checkout --detach "$version"
+
+      # --- half one: the bundle -----------------------------------------------------------------
+      # The daemon's clone is shallow and does not recurse, so src/main/webui arrives as an empty
+      # directory and the image build fails on it. The submodule is initialised from THIS
+      # platform's git host rather than from the .gitmodules URL, which names GitHub.
+      frontend_url="${QITS_CI_REPOSITORY_URL%/*}/qits-spa-docs"
+      git -c submodule.qits-spa-docs.url="$frontend_url" \
+        submodule update --init src/main/webui
+
+      cd src/main/webui
+      # TWO SERVICES since the byte-plane split, so the swap reads the PATH: an entry under the
+      # hosted registry's own pathname ($QITS_NPM_REGISTRY_URL's, /artifacts/npm/npm/) gets the
+      # hosted origin and everything else gets the proxy's, and the broad expression has to run
+      # before the narrow one. ci-post-receive.yml carries the full reasoning.
+      npm_hosted_origin=$(node -p 'new URL(process.env.QITS_NPM_REGISTRY_URL).origin')
+      npm_proxy_origin=$(node -p 'new URL(process.env.QITS_NPM_PROXY_URL).origin')
+      npm_hosted_path=$(node -p 'new URL(process.env.QITS_NPM_REGISTRY_URL).pathname')
+      sed -i -E \
+        -e "s#(\"resolved\": \")https?://[^/\"]+#\1$npm_proxy_origin#" \
+        -e "s#(\"resolved\": \")https?://[^/\"]+($npm_hosted_path)#\1$npm_hosted_origin\2#" \
+        package-lock.json
+
+      env npm_config_registry="$QITS_NPM_PROXY_URL" \
+          "npm_config_@qits:registry=$QITS_NPM_REGISTRY_URL" \
+          npm ci --no-audit --no-fund
+
+      npm run build
+      cd -
+
+      # --- half two: the image ------------------------------------------------------------------
+      # NO `--network` FLAG, the same fact ci-post-receive.yml states: nothing this build runs wants
+      # the platform's own network. The pom declares no qits dependency and no qits-maven
+      # repository, Quinoa's install and build commands are replaced by `--version`, and the base
+      # images are pulled by the DAEMON on the host. Default networking gives the RUN steps the
+      # public internet, which is all they ask for.
+      ref="$QITS_REGISTRY/$QITS_IMAGE_REPOSITORY/qits-docs:$version"
+      docker build -t "$ref" -f docker/Dockerfile .
+      docker push "$ref"
+      # NO `docker rmi "$ref"`: on a CI host it frees nothing — the layers stay in the builder's
+      # cache either way — while under the containerd image store it drops the last reference to
+      # content a concurrent build of this same Dockerfile may still be resolving, which is the
+      # race that broke the release of 2026-08-11.
