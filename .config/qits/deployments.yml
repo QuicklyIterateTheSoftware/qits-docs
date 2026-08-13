@@ -17,5 +17,5 @@ deployment_target: environment
 # prefix dropped — which is exactly right here. It is spelled anyway because the segment is
 # spelled in three other places (DocsPaths.BASE, quarkus.http.non-application-root-path, and
 # QitsService.DOCS in the gateway), so a reader chasing a failing health gate finds
-# it here too. (Still broken on purpose — the fixed deployer must record ROLLED_BACK.)
-health_path: /docs/q/health/nope
+# it here too.
+health_path: /docs/q/health/ready
