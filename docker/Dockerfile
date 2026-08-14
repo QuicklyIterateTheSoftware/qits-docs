@@ -15,19 +15,21 @@
 # Quinoa recipe, for its reason exactly. src/main/webui is qits-spa-docs and it depends on
 # @qits/ui-components, which exists ONLY on the platform's own npm registry. A RUN step in a docker
 # build reaches the public internet and can reach that registry by NO address: not the qits-net
-# alias, not localhost:8081, not host.docker.internal. So the install happens where it can — the CI
-# step container on qits-net, or a developer's host — and this stage packages an already-built
-# dist/ with Quinoa's install and build commands replaced by `--version`. An install that "worked"
-# here would have resolved the @qits scope against npmjs.org, where those names do not exist.
+# alias, not registry.dev.localhost:8080, not host.docker.internal. So the install happens where it
+# can — the CI step container on qits-net, or a developer's host — and this stage packages an
+# already-built dist/ with Quinoa's install and build commands replaced by `--version`. An install
+# that "worked" here would have resolved the @qits scope against npmjs.org, where those names do not
+# exist.
 
 # --- stage `build`: native-compile ---------------------------------------------------------------
 # The builder JDK MUST be 25: native-image cannot read bytecode newer than its own JDK, and this
 # project targets release 25.
 #
-# `localhost:8082/quay/…` is qits-platform-mirror's pull-through mirror of quay.io: the first build
-# fetches from upstream and caches it, every later build is served from local disk. The tag is
-# upstream's, unchanged — the mirror revalidates it, so `jdk-25` still moves when quay moves it.
-FROM localhost:8082/quay/quarkus/ubi9-quarkus-mandrel-builder-image:jdk-25 AS build
+# `mirror.dev.localhost:8080/quay/…` is qits-platform-mirror's pull-through mirror of quay.io: the
+# first build fetches from upstream and caches it, every later build is served from local disk. The
+# tag is upstream's, unchanged — the mirror revalidates it, so `jdk-25` still moves when quay moves
+# it.
+FROM mirror.dev.localhost:8080/quay/quarkus/ubi9-quarkus-mandrel-builder-image:jdk-25 AS build
 USER root
 WORKDIR /src
 
@@ -75,8 +77,8 @@ RUN d=src/main/webui/dist/qits-spa-docs/browser; \
       -Dquarkus.quinoa.package-manager-command.build=--version
 
 # --- runtime -------------------------------------------------------------------------------------
-# `localhost:8082/redhat/…` is the same mirror, pointed at registry.access.redhat.com.
-FROM localhost:8082/redhat/ubi9/ubi-minimal:9.6
+# `mirror.dev.localhost:8080/redhat/…` is the same mirror, pointed at registry.access.redhat.com.
+FROM mirror.dev.localhost:8080/redhat/ubi9/ubi-minimal:9.6
 WORKDIR /work
 
 # `quarkus.package.output-name` names the binary `qits-docs` (no -runner suffix), so the
