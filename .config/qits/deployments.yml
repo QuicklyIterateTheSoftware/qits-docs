@@ -13,6 +13,9 @@
 # not two onto one.
 deployment_target: environment
 
+routes: /docs
+navigation: Docs:8
+
 # The default would be /docs/q/health/ready, derived from the name with the qits-
 # prefix dropped — which is exactly right here. It is spelled anyway because the segment is
 # spelled in three other places (DocsPaths.BASE, quarkus.http.non-application-root-path, and
