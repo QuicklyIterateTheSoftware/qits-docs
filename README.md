@@ -1,8 +1,8 @@
 # qits-docs
 
 **The environment's reading room.** One address where every documentation site published into this
-environment can be read — `/docs/@qits/ui-components/` and you are looking at the newest release's
-workbench.
+environment can be read — `docs.<env>.<domain>/docs/@qits/ui-components/` and you are looking at the
+newest release's workbench.
 
 An **environment service**: it is deployed once per environment and reads that environment's own
 `qits-artifacts`. It was platform-scoped only because the store was.
@@ -31,7 +31,7 @@ this process adds is a redirect or a header, and the section below is the whole 
 
 | Route | What it does |
 | --- | --- |
-| `GET /docs/<site>` | 302 → the newest version's directory |
+| `GET /docs/<site>` | 302 → the reader, at `/read/<site>` |
 | `GET /docs/<site>/` | the same |
 | `GET /docs/<site>/-/<version>` | 302 → the same path **with a trailing slash** |
 | `GET /docs/<site>/-/<version>/` | the bundle's `index.html` |
@@ -104,10 +104,10 @@ dials it from inside `qits-net`, so a host-published mapping (a local stack's `l
 
 ## Deployment
 
-One published port, fronted by qits-gateway, which routes `/docs/*` here verbatim and
-rewrites nothing — there is no unprefixed spelling, on `qits-net` either. The segment comes from
-`QitsService.DOCS`, derived from this repository's name; it is a literal in `DocsPaths` and
-no config key moves it.
+One published port, and one host of its own: `docs.<env>.<domain>`. The edge serves **the client at
+`/`** there and path-routes `/docs/**` to this service from every host on the platform, verbatim —
+there is no unprefixed spelling of the machine surface, on `qits-net` either. The segment is a
+literal in `DocsPaths` and no config key moves it.
 
 Readiness is the stock `/docs/q/health/ready`, and it is stock **deliberately**: this
 service has no state whose health could differ from "the process is up", and a check that dialled
@@ -124,27 +124,34 @@ qits-artifacts would take this container down for an outage it is designed to su
 ## The client
 
 `src/main/webui` is the [qits-spa-docs](https://github.com/QuicklyIterateTheSoftware/qits-spa-docs)
-submodule, built and served by Quinoa. Three layers over the same store:
+submodule, built and served by Quinoa **at the root of this service's host** (`baseHref: /`,
+`quarkus.quinoa.ui-root-path=/`). Two pages, and a scoped spelling of each:
 
-    /docs/                          what publishes documentation, by scope
-    /docs/@qits                     what that scope publishes
-    /docs/read/<site>/-/<version>   one bundle, with a version picker beside it
+    /                                    the door sign
+    /read/<site>/-/<version>             one bundle, in a frame
+    /<slug>/<category>/<repo>/           the same, for one repository's documentation
+    /<slug>/<category>/<repo>/read/...
 
-**The reader shows two navigations side by side, and that is the arrangement.** A bundle is a whole
-application — Storybook ships its own full-height sidebar — so the client cannot put the version
-picker inside it and must not try. It owns a narrow rail (where you are, which version) and hands
-the rest to an `<iframe>`.
+`/docs/**` is the machine surface beside it — the catalog, and the bundle bytes.
 
-> **`DocsRoutes.ROUTE_ORDER` is 20 000, between Quinoa's two routes, and the client does not render
-> without it.** Quinoa registers static resources at 1060 and its SPA fallback near 40 000. Below
-> 1060, `SITE` claims the client's own `main-<hash>.js` — one alphanumeric segment, a perfectly good
-> site name — asks the store for its versions and answers 404: the index renders and every asset is
-> gone. At or past 40 000 the fallback answers bundle paths with `index.html` instead. Both numbers
-> are read off the Quinoa jar and are not API; re-check them when the pin moves.
+**The reader is one frame under the platform sidebar.** A bundle is a whole application — Storybook
+ships its own full-height sidebar — so the client cannot put the version picker inside it and must
+not try. Where you are and which version you are reading live in the sidebar's sub-menu; the page
+itself is the `<iframe>`, edge to edge.
 
-`/docs/@qits` is the one path this service **declines**: a single segment beginning with
-`@` is a scope, and `latest()` calls `next()` so Quinoa's fallback serves the client. `read/` is
-reserved out of the site grammar for the same reason, beside `q/` and `api/`.
+> **`DocsRoutes.ROUTE_ORDER` is 20 000, between Quinoa's two routes.** Quinoa registers static
+> resources at 1060 and its SPA fallback near 40 000; these routes sit above the first and below the
+> second. The client is at `/` and these are under `/docs`, which is an ignored prefix besides, so
+> neither boundary is load-bearing any more — but the first one was: with the client under this
+> segment, `SITE` claimed its own `main-<hash>.js` bundle, asked the store for the versions of a
+> site by that name and 404'd, so the index rendered with every asset gone. Both numbers are read
+> off the Quinoa jar and are not API; re-check them when the pin moves.
+
+`/docs/@qits` is a **scope, not a site**, and answers a plain-text 404: there is no newest version
+of a scope to redirect to. It used to fall through to a client page under this segment; the client
+is at the host root now and `/docs` is an ignored prefix, so the fall-through would have reached
+Quarkus' own HTML 404 instead. `read/` is no longer reserved out of the site grammar either — the
+reader is at `/read/**`, outside `/docs` entirely. `q/` and `api/` still are.
 
 ## Not built yet
 

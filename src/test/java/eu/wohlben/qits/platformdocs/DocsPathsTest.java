@@ -81,14 +81,16 @@ class DocsPathsTest {
     assertFalse(matches(DocsPaths.SITE, "/docs/q/health/live"));
     assertFalse(matches(DocsPaths.SITE_LATEST, "/docs/q/metrics/"));
     assertFalse(matches(DocsPaths.SITE, "/docs/api/sites"));
-    assertFalse(matches(DocsPaths.SITE, "/docs/read/@qits/ui-components"));
-    assertFalse(matches(DocsPaths.FILE, "/docs/read/x/-/1.0.0/i.html"));
     assertFalse(matches(DocsPaths.FILE, "/docs/q/health/-/1.0.0/x"));
+
+    // `read/` was a third reserved prefix and its cases are GONE with it. The reader was a client
+    // page under this segment; it is at /read/** on this service's own host now, outside /docs, so
+    // `read` is an ordinary site name again.
+    assertTrue(matches(DocsPaths.SITE, "/docs/read/@qits/ui-components"));
 
     // The reservation is exactly two prefixes and does not leak into ordinary names.
     assertTrue(matches(DocsPaths.SITE, "/docs/quarkus-things"), "q is not a prefix of q/");
     assertTrue(matches(DocsPaths.SITE, "/docs/apiary"));
-    assertTrue(matches(DocsPaths.SITE, "/docs/readme"), "read is not a prefix of read/");
     assertTrue(matches(DocsPaths.SITE, "/docs/@qits/api"), "reserved only at the root");
   }
 

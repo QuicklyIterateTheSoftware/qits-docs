@@ -57,17 +57,17 @@ public class DocsRoutes {
    * Where these routes sit relative to Quinoa's two, and it is the whole reason the client renders.
    *
    * <p>Measured order (Quinoa 2.8.2, Quarkus 3.34.6): Quinoa registers its <b>static resources</b>
-   * at 1060 and its <b>SPA fallback</b> near 40 000. These routes must sit strictly between them,
-   * which is qits-gateway's arrangement and for the same two reasons:
+   * at 1060 and its <b>SPA fallback</b> near 40 000. These routes sit strictly between them.
    *
    * <ul>
-   *   <li><b>Below 1060 the client stops loading.</b> Its bundle is {@code main-<hash>.js} — one
-   *       segment, alphanumeric, a perfectly good site name — so {@code SITE} claims it, asks the
-   *       store for the versions of a site called {@code main-O4M5TZHF.js}, and answers 404. The
-   *       index renders and every asset it asks for is gone. Measured, not reasoned about.
-   *   <li><b>At or past 40 000 the reading routes stop working.</b> The SPA fallback would answer
-   *       every unmatched path with {@code index.html} first, so a bundle file would come back as
-   *       the client's own shell at 200.
+   *   <li><b>Above 1060</b>, so the client's own files answer first. The two no longer overlap the
+   *       way they did — the client is at {@code /} and these routes are under {@code /docs}, and
+   *       {@code /docs} is an ignored prefix besides — but the ordering costs nothing and is what
+   *       stops a future move re-creating the overlap silently. It used to be load-bearing: with
+   *       the client under this segment, {@code SITE} claimed its {@code main-<hash>.js} bundle
+   *       (one alphanumeric segment, a perfectly good site name) and 404'd every asset.
+   *   <li><b>Below 40 000</b>, so the SPA fallback cannot answer a bundle path with {@code
+   *       index.html} at 200. The ignored prefix says the same thing a second way.
    * </ul>
    *
    * <p>Both Quinoa numbers are read off the jar and are not API — re-check them when the Quinoa pin
@@ -115,7 +115,8 @@ public class DocsRoutes {
   // --- reading ----------------------------------------------------------------------------------
 
   /**
-   * {@code GET /docs/<site>[/]} — 302 to the <b>reader</b>, not to the bundle.
+   * {@code GET /docs/<site>[/]} — 302 to the <b>reader</b> at {@code /read/<site>}, not to the
+   * bundle.
    *
    * <p><b>This is the human entry point, so it must land somewhere with the version picker on
    * it.</b> It used to redirect straight to the newest bundle directory, which served a
@@ -127,15 +128,19 @@ public class DocsRoutes {
    * <p>No version is resolved here any more. The reader fetches the list it needs for the picker
    * anyway, so resolving the newest here as well would be the same question asked twice, one round
    * trip earlier, and a chance for the two answers to differ.
+   *
+   * <p>The target is <b>outside the segment</b>. The client is served at the root of this service's
+   * own host, so the reader is {@code /read/<site>} — {@code /docs/read/...} would now resolve back
+   * into this wire as a site called {@code read/<site>} and 404.
    */
   private void latest(RoutingContext rc) {
     String site = rc.pathParam("name");
-    // A SINGLE segment beginning with @ is a scope, not a site — /docs/@qits is the index
-    // of what @qits publishes, and the client owns that page. Falling through hands it to Quinoa's
-    // SPA route, which is registered after these; answering 404 here would make every scope page a
-    // dead link, and answering the SPA here would put a second renderer in this service.
+    // A SINGLE segment beginning with @ is a scope, not a site, so there is no newest version to
+    // resolve. It used to fall through to the client's scope page; that page is gone and /docs is
+    // an ignored prefix now, so the fall-through would reach Quarkus' own HTML 404 — and this
+    // service answers errors in plain text, always.
     if (site.startsWith("@") && site.indexOf('/') < 0) {
-      rc.next();
+      DocsErrors.send(rc, 404, "'" + site + "' is a scope, not a site");
       return;
     }
     // Still checked here, because a 404 for a site that does not exist is worth answering before a
@@ -144,7 +149,7 @@ public class DocsRoutes {
       DocsErrors.send(rc, 404, "nothing is published under '" + site + "'");
       return;
     }
-    redirect(rc, DocsPaths.BASE + "/read/" + site);
+    redirect(rc, "/read/" + site);
   }
 
   /**

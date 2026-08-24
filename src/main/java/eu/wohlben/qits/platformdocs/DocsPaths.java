@@ -44,9 +44,12 @@ final class DocsPaths {
 
   /**
    * The prefixes a site name may never claim: Quarkus' non-application root ({@code /docs/q/**},
-   * where health lives), this service's own {@code /docs/api/**}, and {@code /docs/read/**} — the
-   * client's reader page, which wraps a bundle in a rail carrying the version picker and therefore
-   * has to reach the SPA rather than this wire.
+   * where health lives) and this service's own {@code /docs/api/**}.
+   *
+   * <p><b>{@code read/} used to be here and is gone.</b> The reader was a client page under this
+   * segment; since the client moved to the root of this service's own host it is at {@code
+   * /read/**}, outside {@code /docs} entirely, so reserving the name here protected nothing. A site
+   * actually called {@code read} is an ordinary site again.
    *
    * <p><b>This is structural on purpose rather than a matter of route order.</b> Both are ordinary
    * site names as far as the character classes are concerned — {@code q/health/ready} is three
@@ -58,7 +61,7 @@ final class DocsPaths {
    * <p>Zero-width, so it costs the named-group count nothing — which matters, see the class
    * javadoc.
    */
-  private static final String NOT_RESERVED = "(?!q/|api/|read/)";
+  private static final String NOT_RESERVED = "(?!q/|api/)";
 
   /**
    * {@code <site>} — {@code ui-components}, {@code @qits/ui-components}, or a deeper project path.
