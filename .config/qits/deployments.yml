@@ -19,9 +19,10 @@ deployment_target: environment
 routes: /docs
 
 # Where this application hangs in the sidebar. Documentation is published by every kind of
-# repository, so it is an entry under all six category detail nodes — the position is per slot, and
-# 1 puts Docs first among a repository's own doors.
-navigation-entries: services.details.Docs:1, daemons.details.Docs:1, libs.details.Docs:1, frontends.details.Docs:1, cli.details.Docs:1, images.details.Docs:1
+# repository, so it is an entry under all six category detail nodes — the position is per slot,
+# and 2 is Docs' place in the platform's fixed order of the per-repository applications
+# (Api Docs 1, Docs 2, Code 3, CI 4, Artifacts 5, Configuration 6, Workspaces 7).
+navigation-entries: services.details.Docs:2, daemons.details.Docs:2, libs.details.Docs:2, frontends.details.Docs:2, cli.details.Docs:2, images.details.Docs:2
 
 # The default would be /docs/q/health/ready, derived from the name with the qits-
 # prefix dropped — which is exactly right here. It is spelled anyway because the segment is
