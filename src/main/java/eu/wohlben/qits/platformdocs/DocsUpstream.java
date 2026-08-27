@@ -7,9 +7,11 @@ import jakarta.enterprise.context.ApplicationScoped;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -152,8 +154,13 @@ public class DocsUpstream {
     return List.copyOf(catalog);
   }
 
-  /** One published version, as the store reports it. */
-  record Version(String version, int fileCount, long totalBytes, String publishedAt) {}
+  /**
+   * One published version, as the store reports it. {@code metadata} is the store's own metadata
+   * object passed through verbatim, or null for a version published before metadata existed (and
+   * against a pre-metadata qits-artifacts) — byte-plane fidelity, no reinterpretation.
+   */
+  record Version(
+      String version, int fileCount, long totalBytes, String publishedAt, JsonObject metadata) {}
 
   /**
    * Every published version of one site with its figures — {@link #versions} plus the detail a
@@ -163,35 +170,82 @@ public class DocsUpstream {
    * resolving {@code latest} wants a list of strings and nothing else, and keeping that path free
    * of a record it does not read is what keeps the hot route cheap to follow.
    *
-   * @return the versions newest-first, or an empty list when the site has none
+   * @param branch narrows to versions whose {@code git.branch.name} metadata equals it (the filter
+   *     is pushed upstream — the store's matching and ordering stay the single source of truth);
+   *     null asks unfiltered
+   * @return the versions newest-first — possibly empty under a branch filter ("no bundle for this
+   *     branch" is an answer) — or null when the store knows no such site
    * @throws DocsUpstreamException the store could not be asked
    */
-  List<Version> versionDetails(String site) {
+  List<Version> versionDetails(String site, String branch) {
+    URI target =
+        branch == null ? uri(site) : URI.create(trimmed() + "/" + site + branchQuery(branch));
     HttpResponse<String> response =
-        send(HttpRequest.newBuilder(uri(site)).GET(), HttpResponse.BodyHandlers.ofString());
+        send(HttpRequest.newBuilder(target).GET(), HttpResponse.BodyHandlers.ofString());
     if (response.statusCode() == 404) {
-      return List.of();
+      return null;
     }
     if (response.statusCode() != 200) {
       throw new DocsUpstreamException(
           "qits-artifacts answered HTTP " + response.statusCode() + " for the versions of " + site);
     }
-    List<Version> versions = new ArrayList<>();
     try {
-      JsonArray listed = new JsonObject(response.body()).getJsonArray("versions", new JsonArray());
-      for (int i = 0; i < listed.size(); i++) {
-        JsonObject entry = listed.getJsonObject(i);
-        versions.add(
-            new Version(
-                entry.getString("version"),
-                entry.getInteger("fileCount", 0),
-                entry.getLong("totalBytes", 0L),
-                entry.getString("publishedAt")));
-      }
+      return parseVersionList(response.body());
     } catch (RuntimeException malformed) {
       throw new DocsUpstreamException(
           "qits-artifacts answered something that is not a version list: "
               + malformed.getMessage());
+    }
+  }
+
+  /**
+   * One version's whole document — {@code GET <store>/<site>/-/<version>}: figures, {@code files},
+   * {@code metadata}. Verbatim as a {@link JsonObject} (parsed to prove it is JSON, never rebuilt),
+   * or null when the store knows no such version.
+   *
+   * @throws DocsUpstreamException the store could not be asked, or answered something else
+   */
+  JsonObject versionDocument(String site, String version) {
+    HttpResponse<String> response =
+        send(
+            HttpRequest.newBuilder(uri(site + "/-/" + version)).GET(),
+            HttpResponse.BodyHandlers.ofString());
+    if (response.statusCode() == 404) {
+      return null;
+    }
+    if (response.statusCode() != 200) {
+      throw new DocsUpstreamException(
+          "qits-artifacts answered HTTP " + response.statusCode() + " for " + site + "@" + version);
+    }
+    try {
+      return new JsonObject(response.body());
+    } catch (RuntimeException malformed) {
+      throw new DocsUpstreamException(
+          "qits-artifacts answered something that is not a version document: "
+              + malformed.getMessage());
+    }
+  }
+
+  /** The upstream {@code ?meta.git.branch.name=} filter, with the branch percent-encoded. */
+  static String branchQuery(String branch) {
+    // The SITE path is safe to concatenate (DocsPaths' classes exclude ? and &) — a branch name is
+    // not: it is a query VALUE off the reader's own query string and can carry '/', '#', spaces.
+    return "?meta.git.branch.name=" + URLEncoder.encode(branch, StandardCharsets.UTF_8);
+  }
+
+  /** The version-array reading, extracted pure so a plain JUnit test can drive its two shapes. */
+  static List<Version> parseVersionList(String body) {
+    List<Version> versions = new ArrayList<>();
+    JsonArray listed = new JsonObject(body).getJsonArray("versions", new JsonArray());
+    for (int i = 0; i < listed.size(); i++) {
+      JsonObject entry = listed.getJsonObject(i);
+      versions.add(
+          new Version(
+              entry.getString("version"),
+              entry.getInteger("fileCount", 0),
+              entry.getLong("totalBytes", 0L),
+              entry.getString("publishedAt"),
+              entry.getJsonObject("metadata")));
     }
     return List.copyOf(versions);
   }

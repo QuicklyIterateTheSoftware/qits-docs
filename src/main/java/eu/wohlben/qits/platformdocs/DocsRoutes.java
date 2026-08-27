@@ -13,6 +13,7 @@ import jakarta.inject.Inject;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.jboss.logging.Logger;
 
@@ -87,6 +88,10 @@ public class DocsRoutes {
     router
         .get(DocsPaths.BASE + "/api/versions")
         .blockingHandler(guarded("versions", this::apiVersions));
+    router
+        .get(DocsPaths.BASE + "/api/version")
+        .order(ROUTE_ORDER)
+        .blockingHandler(guarded("version", this::apiVersion));
 
     // Then longest path first. Also disjoint by construction: a bare `-` is not a name segment, so
     // no site path can be read as a version path and no version root as a file.
@@ -279,20 +284,60 @@ public class DocsRoutes {
       DocsErrors.send(rc, 400, "?site= is required");
       return;
     }
+    // ?branch= is pushed upstream as the store's own metadata filter, never applied locally — the
+    // store's matching and ordering stay the single source of truth for "the branch's latest".
+    String branch = rc.request().getParam("branch");
+    List<DocsUpstream.Version> details =
+        upstream.versionDetails(site, branch == null || branch.isBlank() ? null : branch);
+    if (details == null) {
+      DocsErrors.send(rc, 404, "nothing is published under '" + site + "'");
+      return;
+    }
+    // A known site filtered to nothing is an ANSWER (200, empty list) — a branch-latest probe has
+    // to be able to render "no bundle for this branch". Unfiltered-and-empty is unreachable (a
+    // site exists only by publishing a non-empty bundle), so no 404 arm is lost here.
     JsonArray listed = new JsonArray();
-    for (DocsUpstream.Version version : upstream.versionDetails(site)) {
-      listed.add(
+    for (DocsUpstream.Version version : details) {
+      JsonObject entry =
           new JsonObject()
               .put("version", version.version())
               .put("fileCount", version.fileCount())
               .put("totalBytes", version.totalBytes())
-              .put("publishedAt", version.publishedAt()));
-    }
-    if (listed.isEmpty()) {
-      DocsErrors.send(rc, 404, "nothing is published under '" + site + "'");
-      return;
+              .put("publishedAt", version.publishedAt());
+      if (version.metadata() != null) {
+        // Verbatim pass-through of the store's object — byte-plane fidelity, and zero reflection.
+        entry.put("metadata", version.metadata());
+      }
+      listed.add(entry);
     }
     respond(rc, 200, new JsonObject().put("name", site).put("versions", listed));
+  }
+
+  /**
+   * {@code GET /docs/api/version?site=<name>&version=<v>} — ONE version's document, {@code files}
+   * and {@code metadata} included. This is what lets the client decide how to read a bundle (an
+   * {@code index.html} site framed whole, a directory of markdown rendered page by page, an OpenAPI
+   * document handed to swagger-ui) and enumerate what it may fetch, without probing for paths it
+   * would have to guess. Query parameters for the same reason {@code ?site=} is one on the list
+   * route: a site name spans path segments.
+   *
+   * <p>The store's document is passed through <b>verbatim</b> — parsed only to prove it is JSON,
+   * never rebuilt member by member — so a member the store adds later reaches the client with no
+   * edit here. Byte-plane fidelity, and zero reflection.
+   */
+  private void apiVersion(RoutingContext rc) {
+    String site = rc.request().getParam("site");
+    String version = rc.request().getParam("version");
+    if (site == null || site.isBlank() || version == null || version.isBlank()) {
+      DocsErrors.send(rc, 400, "?site= and ?version= are both required");
+      return;
+    }
+    JsonObject document = upstream.versionDocument(site, version);
+    if (document == null) {
+      DocsErrors.send(rc, 404, "no such version: " + site + "@" + version);
+      return;
+    }
+    respond(rc, 200, document);
   }
 
   // --- plumbing ---------------------------------------------------------------------------------
