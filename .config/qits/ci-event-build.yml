@@ -1,20 +1,16 @@
-# The pipeline qits-ci runs on every push to a tracked branch of this repository.
-#
-# ONE STEP, and it is the whole of what this repository ships: tests, then a native image pushed to
-# qits-artifacts under $QITS_REGISTRY/$QITS_IMAGE_REPOSITORY/qits-docs:$QITS_CI_SHA — the
-# tag convention qits-platform-deployments pulls by.
-#
-# `docker: true` is the declared opt-in that mounts the host socket for this step, because building
-# and pushing an image is what it is for. It is root-equivalent on the host and is declared here
-# where a diff shows it — see qits-ci's AGENTS.md on the untrusted-input posture.
-#
-# THE CLIENT PRELUDE IS PRESENT, the same one qits-gateway's pipeline carries: this step inits the
-# `qits-spa-docs` submodule and runs `npm ci && npm run build` before the image build. The @qits
-# scope is reachable from qits-net and from no address a docker build has, so the bundle must be
-# built HERE and arrive in the build context.
-#
-# The image is built by docker/Dockerfile's Mandrel builder stage rather than by this container:
-# node-docker-base carries no GraalVM, and the builder stage brings its own native-image.
+# The image build, per push — moved from ci-post-receive.yml when this repo went domain-event-only,
+# the switch qits-githost and qits-artifacts already made. `checkout:` makes it a move rather than a
+# rewrite: the run builds the pushed branch at the pushed sha, but the pipeline is DISCOVERED at main,
+# so a pushed branch can no longer alter the CI that gates it. suppressCi restates what the
+# post-receive convention did with `-o qits.no-ci`. Separate from ci-event-userflows.yml on purpose:
+# that run is non-gating, a red verify must not cost the image.
+event: SCMPublishCommit
+when:
+  - repoId: { exact: qits-docs }
+    suppressCi: { exact: "false" }
+checkout:
+  branch: branch
+  sha: sha
 steps:
   - image: qits/build-images/node-docker-base:latest
     docker: true
