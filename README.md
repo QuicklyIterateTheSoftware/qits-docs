@@ -11,9 +11,20 @@ A small, stateless Quarkus 3 (Java 25) application that compiles to a **GraalVM 
 has no database, no ORM, no cache and no state of its own: it resolves a readable URL to a
 version-addressed one and streams the bytes qits-artifacts holds.
 
-    ./mvnw verify                                  # no docker, no network, no qits-artifacts
+    ./mvnw verify                                  # no docker, no database, no qits-artifacts
     ./mvnw package && java -jar target/quarkus-app/quarkus-run.jar
     ./mvnw verify -Dnative && ./target/qits-docs
+
+`verify` now also launches the packaged artifact: `DocsReadingBootstrapIT` is this repository's one
+integration test and its two **userflow** stories are what emit `target/userstories/`, published per
+commit as the docs site `@userflows/qits-docs` — into the store this service reads. It needs no
+docker and no running qits-artifacts (the far side is an in-process recording stub on loopback),
+but it does need **Maven** to reach the platform's own repository for the two test-scope jars
+`qits-userflows` and `qits-service-mock`, which are the first qits dependencies this pom has ever
+had. Off the platform network that means the usual pair:
+
+    export QITS_MAVEN_REPOSITORY_URL=http://registry.dev.localhost:8080/artifacts/maven/maven
+    ./mvnw -s .qits-maven-settings.xml verify
 
 ## Why this exists rather than a path on qits-artifacts
 

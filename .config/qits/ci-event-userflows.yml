@@ -1,0 +1,81 @@
+# The per-commit userflow run: `mvn verify` at the pushed commit — which regenerates
+# target/userstories/ through DocsReadingBootstrapIT — and the reports published as one docs
+# bundle, site @userflows/qits-docs, version = the bare commit sha, branch riding as artifacts
+# metadata for discovery.
+#
+# THIS ONE IS SELF-REFERENTIAL, and it is the only file in the fleet that is: the bundle published
+# below lands in the very store this service reads, so a green run adds a site that qits-docs then
+# serves. Nothing circular follows — the PUT goes to qits-artifacts, and this pipeline listens for
+# a commit, not for a publish.
+#
+# NON-GATING BY DESIGN, which is why it is a separate file from ci-post-receive.yml: this run going
+# red must not cost the branch its image while "quality gate before merging" is still a decision to
+# be taken — when it is, these per-commit runs are what the gate reads. One run per push per
+# branch, collapsed to the newest tip under burst.
+#
+# `user: build`, and NOT a switch inside the script. In the sibling files that line is the initdb
+# workaround — zonky's embedded postgres refuses to run as root — and NONE of that applies here:
+# this service has no database, the pom names no zonky binaries, and the story's whole far side is
+# an in-process stub on loopback. It is spelled anyway because it is the fleet's posture for a step
+# that only builds: passwd-backed non-root (maven-base carries uid 1001), cap-drop=ALL, no chown
+# and no su available to undo it. Nothing this step runs wants any of those.
+#
+# Quinoa is off (`-Dquarkus.quinoa=false` — the extension's root toggle; `.enabled` is silently
+# ignored and npm still runs): the client is ci-post-receive.yml's business, where the qits-spa-docs
+# submodule is initialised and its lockfile origins are swapped, and none of that ritual belongs
+# here — the stories assert nothing about the SPA. It is also what keeps this step from needing the
+# submodule at all: the daemon's clone does not recurse, so src/main/webui arrives EMPTY and
+# Quinoa would fail the build on exactly that. The packaged fast-jar failsafe boots is otherwise
+# exactly what ships.
+#
+# NO IT FLAGS, and that is the other half of the story. This repository opts its ITs back in from
+# the pom (`skipITs` false) the way qits-githost does, rather than naming a class here, because
+# DocsReadingBootstrapIT is the ONLY integration test there is: there is no heavyweight sibling
+# — no docker gate, no real git, no spawned database — for a flipped property to drag into
+# somebody's plain `mvn verify`. The surefire half of this run is the same five-second pair of
+# plain-JUnit classes a clone already runs.
+#
+# Loop review: this pipeline PUTs a docs bundle and pushes no commit — no cycle. Publish-if-absent:
+# events redeliver and docs versions are immutable, so 409 is success (the qits-spa-ui-components
+# release file's discipline).
+event: SCMPublishCommit
+when:
+  - repoId: { exact: qits-docs }
+    suppressCi: { exact: "false" }
+checkout:
+  branch: branch
+  sha: sha
+steps:
+  - image: qits/build-images/maven-base:latest
+    user: build
+    timeout-seconds: 2400
+    script: |
+      set -eu
+      # The platform registry, exactly as qits-eventstream's step derives it: the pom's default
+      # names a host-published address unreachable from a step container, and the exact-id mirror
+      # in .qits-maven-settings.xml is what passes Maven's HTTP blocker. This repository's pom
+      # gained its `qits-maven` repository WITH the userflows rollout — the two test-scope jars
+      # (qits-userflows, qits-service-mock) are the first qits dependencies it has ever had.
+      export QITS_MAVEN_REPOSITORY_URL="$QITS_MAVEN_REGISTRY_URL"
+      ./mvnw -B -ntp -s .qits-maven-settings.xml verify \
+        -Dqits.maven.repository.url="$QITS_MAVEN_REPOSITORY_URL" \
+        -Dquarkus.quinoa=false
+
+      # `-C … .` so the story directories are the bundle's roots — nesting one directory deep would
+      # put it in every served URL. SINGLE-MODULE repository, so the path is target/userstories and
+      # not the service/target/… every sibling's file names.
+      tar -czf userstories.tgz -C target/userstories .
+
+      # Branch and commit ride as metadata (the docs store's exact-match discovery keys); the
+      # version is the sha itself, so a bundle URL never changes meaning.
+      status=$(curl -sS -o /tmp/docs-publish.out -w '%{http_code}' \
+        -X PUT --data-binary @userstories.tgz \
+        -H "X-Artifacts-Meta-git.branch.name: $QITS_CI_BRANCH" \
+        -H "X-Artifacts-Meta-git.commit.hash: $QITS_CI_SHA" \
+        -H "X-Artifacts-Meta-git.repository.name: qits-docs" \
+        "$QITS_DOCS_URL/@userflows/qits-docs/-/$QITS_CI_SHA")
+      case "$status" in
+        201) echo "published userflows for qits-docs@$QITS_CI_SHA ($QITS_CI_BRANCH)" ;;
+        409) echo "userflows for qits-docs@$QITS_CI_SHA already published — skipping" ;;
+        *)   echo "docs publish failed: HTTP $status"; cat /tmp/docs-publish.out; exit 1 ;;
+      esac
