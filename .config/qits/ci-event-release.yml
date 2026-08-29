@@ -16,9 +16,10 @@
 #   step container and `localhost:8081` outside, and an OCI reference cannot carry a path prefix.
 #   The reader supplies its own host, exactly as the push below composes one from environment.
 # - THE BUILD BELOW IS ci-post-receive.yml's, AND THE TWO MUST STAY MATCHED. That file is where the
-#   client prelude, the lockfile origin swap, the `npm_config_*` environment and the absence of a
-#   `--network` flag are explained at length; this one carries the short form and points there
-#   rather than keeping a second copy of the reasoning to drift.
+#   client prelude, the lockfile origin swap, the `npm_config_*` environment and the two docker
+#   flags (`--network host` plus the Maven repository build arg) are explained at length; this one
+#   carries the short form and points there rather than keeping a second copy of the reasoning to
+#   drift.
 # - THIS FILE IS INERT UNTIL an SCMRelease for this repository exists, and it lands first on
 #   purpose: the bus is at-most-once with no catch-up and no replay, so a trigger file must be in
 #   place before the event it selects. The other order loses a release and looks like a train that
@@ -93,20 +94,24 @@ steps:
       cd -
 
       # --- half two: the image ------------------------------------------------------------------
-      # NO `--network` FLAG, the same fact ci-post-receive.yml states: nothing this build runs wants
-      # the platform's own network. The pom declares no qits dependency and no qits-maven
-      # repository, Quinoa's install and build commands are replaced by `--version`, and the base
-      # images are pulled by the DAEMON on the host. Default networking gives the RUN steps the
-      # public internet, which is all they ask for.
+      # THE TWO DOCKER FLAGS, the same pair ci-post-receive.yml explains at length: the pom now
+      # carries `qits-userflows` and `qits-service-mock` in TEST scope for DocsReadingBootstrapIT,
+      # both published only to the platform's own Maven repository, and the builder stage runs the
+      # suite — so it resolves the test classpath and needs an address that answers. `--network
+      # host` because buildkit refuses a custom network; `--build-arg` because the address is
+      # derived from injected env rather than stated here. Quinoa is still no part of it (its
+      # commands are replaced by `--version`), and the base images are pulled by the DAEMON on the
+      # host.
       #
       # The two --secret flags are the fleet's shape for a credential inside a build; the launcher
       # injects the run's commissioned idp client as
-      # $QITS_COMMISSIONED_CLIENT_ID/$QITS_COMMISSIONED_CLIENT_SECRET. This build consumes neither,
-      # for the same reason it takes no network flag — no qits dependency, no qits-maven repository,
-      # so the Dockerfile mounts no secret. Inert on both counts: buildx ignores a secret no RUN
-      # mounts, and a missing env source is NOT an error (measured on buildx v0.36.1).
+      # $QITS_COMMISSIONED_CLIENT_ID/$QITS_COMMISSIONED_CLIENT_SECRET. The Dockerfile's mvnw RUN
+      # mounts both as the `qits-maven-network` server's credentials, and they stay inert until the
+      # registry answers 401 — Maven sends a password only when challenged, and a missing env source
+      # is NOT an error (measured on buildx v0.36.1).
       ref="$QITS_REGISTRY/$QITS_IMAGE_REPOSITORY/qits-docs:$version"
-      docker build \
+      docker build --network host \
+        --build-arg QITS_MAVEN_REPOSITORY_URL="http://$QITS_REGISTRY/artifacts/maven/maven" \
         --secret id=qits-client-id,env=QITS_COMMISSIONED_CLIENT_ID \
         --secret id=qits-client-secret,env=QITS_COMMISSIONED_CLIENT_SECRET \
         -t "$ref" -f docker/Dockerfile .

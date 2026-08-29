@@ -36,11 +36,36 @@
              3.36.2, ahead of us. Bump it only past a platform bump, and everywhere at once. -->
         <quinoa.version>2.8.2</quinoa.version>
 
+        <!-- The user-story framework (TEST SCOPE ONLY): DocsReadingBootstrapIT is a userflow, so a
+             `mvn verify` also regenerates target/userstories/ — the story's documentation, sequence
+             diagram included. Published out of libs/qits-userflows into the platform's own Maven
+             repository, which is why the <repositories> block below now exists: this pom used to
+             resolve everything from Maven Central. -->
+        <qits.userflows.version>2026.828.153026</qits.userflows.version>
+        <!-- The recording service mocks the same IT boots against — the generic MockService, which
+             stands in for qits-artifacts' docs repository. Released out of
+             libs/qits-integrations-quarkus. -->
+        <qits.service-mock.version>2026.827.71232</qits.service-mock.version>
+        <!-- Where both come from. The default is the registry's HOST-PUBLISHED address, which is
+             right for a developer and reachable from nothing else; every build that runs elsewhere
+             overrides it — .config/qits/ci-event-userflows.yml from $QITS_MAVEN_REGISTRY_URL, and
+             docker/Dockerfile from its QITS_MAVEN_REPOSITORY_URL build arg. -->
+        <qits.maven.repository.url>http://registry.dev.localhost:8080/artifacts/maven/maven</qits.maven.repository.url>
+
         <compiler-plugin.version>3.15.0</compiler-plugin.version>
         <surefire-plugin.version>3.5.4</surefire-plugin.version>
+        <failsafe-plugin.version>${surefire-plugin.version}</failsafe-plugin.version>
         <spotless-plugin.version>2.44.5</spotless-plugin.version>
         <google-java-format.version>1.28.0</google-java-format.version>
-        <skipITs>true</skipITs>
+        <!-- INTEGRATION TESTS RUN BY DEFAULT HERE, unlike most siblings, and the reason is that
+             DocsReadingBootstrapIT is the only one there is: no docker, no database, no network
+             beyond a loopback stub, and it is also the GENERATOR of the userstories documentation.
+             The qits-githost shape — a repository whose ITs are cheap opts in, one whose suite
+             carries a heavyweight sibling names the class on the command line instead.
+
+             docker/Dockerfile is unaffected: its builder stage stops at `package`, which is before
+             the integration-test phase, so the image build never launches the artifact. -->
+        <skipITs>false</skipITs>
     </properties>
 
     <dependencyManagement>
@@ -111,7 +136,43 @@
             <artifactId>rest-assured</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <!-- The user-story framework: DocsReadingBootstrapIT is written as @UserStory methods,
+                 so the packaged-boot proof doubles as documentation — steps, interactions and a
+                 sequence diagram emitted under target/userstories/. Both stories are browserless
+                 (an Interactions parameter and no Flow), so the transitive Playwright never
+                 launches anything and no browser is downloaded.
+
+                 NOTE THE GROUP ID. This project is `eu.wohlben`, the platform's libraries are
+                 `eu.wohlben.qits`, so neither of these two can be spelled with ${project.groupId}
+                 the way a sibling in the qits reactor spells it. -->
+            <groupId>eu.wohlben.qits</groupId>
+            <artifactId>qits-userflows</artifactId>
+            <version>${qits.userflows.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <!-- The recording service mock. The IT points qits.docs.artifacts-url at a MockService
+                 stubbed with qits-artifacts' own docs shapes, and its recordings are what make each
+                 interaction assertable on the STORE's end as well as the reader's. -->
+            <groupId>eu.wohlben.qits</groupId>
+            <artifactId>qits-service-mock</artifactId>
+            <version>${qits.service-mock.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
+
+    <repositories>
+        <!-- The platform's own Maven repository, where the two test-scope jars above are published
+             and where nothing else in this pom comes from. The id is what a locally cached copy is
+             recorded under, so it has to stay `qits-maven` or an offline build refuses an artifact
+             it already has — and it is also the id .qits-maven-settings.xml mirrors, which is the
+             one thing that outranks Maven's external-http blocker for an http:// URL. -->
+        <repository>
+            <id>qits-maven</id>
+            <url>${qits.maven.repository.url}</url>
+        </repository>
+    </repositories>
 
     <build>
         <plugins>
@@ -135,6 +196,37 @@
                     <systemPropertyVariables>
                         <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                         <maven.home>${maven.home}</maven.home>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+            <plugin>
+                <!-- DocsReadingBootstrapIT binds here. There was no failsafe wiring in this
+                     repository at all before it — this pom had no integration test to run — so the
+                     executions are declared rather than inherited from anywhere. With skipITs
+                     false above, a plain `mvn verify` launches the packaged fast-jar; the `native`
+                     profile runs the same stories against the binary. -->
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>${failsafe-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <systemPropertyVariables>
+                        <!-- How @QuarkusIntegrationTest finds the compiled binary in a `-Dnative`
+                             build; without it the native run has nothing to launch. The name is
+                             `quarkus.package.output-name` from application.properties (and the
+                             Dockerfile's COPY line), NOT maven's finalName — all three spellings
+                             move together. -->
+                        <native.image.path>${project.build.directory}/qits-docs</native.image.path>
+                        <!-- Launch the packaged app on a free port instead of the default 8081,
+                             which on the deployment host is the platform's own npm registry. -->
+                        <quarkus.http.test-port>0</quarkus.http.test-port>
+                        <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>

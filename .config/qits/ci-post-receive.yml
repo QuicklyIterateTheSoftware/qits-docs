@@ -71,30 +71,43 @@ steps:
       # and the step's whole job is to drive docker.
       #
       # The suite therefore runs in that stage too (docker/Dockerfile does NOT pass -DskipTests):
-      # it needs no docker, no network and no qits-artifacts, so it costs seconds and a broken route
-      # grammar fails the build before the native compile rather than after a deploy.
+      # it needs no docker and no running qits-artifacts, so it costs seconds and a broken route
+      # grammar fails the build before the native compile rather than after a deploy. It DOES now
+      # need the platform's Maven repository, to resolve the two test-scope userflow jars — which is
+      # what the two docker flags below are for; the userflow story itself is not run here (failsafe
+      # binds after `package`), only compiled.
       #
-      # NO `--network` FLAG, and that is a fact about this build rather than an omission: nothing it
-      # runs wants the platform's own network. The pom declares no qits dependency and no qits-maven
-      # repository, so Maven resolves from Central; Quinoa's install and build commands are replaced
-      # by `--version`, so no npm registry is read; and the `localhost:8082` base images are pulled
-      # by the DAEMON, which runs on the host, not by the build's network namespace. Default
-      # networking gives the RUN steps the public internet, which is all they ask for.
+      # THE TWO DOCKER FLAGS, and this build acquired them with the userflows rollout. This file
+      # used to say at length that nothing here wanted the platform's own network, because the pom
+      # declared no qits dependency and Maven resolved from Central. That stopped being true: the
+      # pom now carries `qits-userflows` and `qits-service-mock` in TEST scope for
+      # DocsReadingBootstrapIT, both published to the platform's own Maven repository and available
+      # from nowhere else — and the builder stage deliberately runs the suite, so it resolves the
+      # test classpath and needs an address that answers.
       #
-      # This line used to pass `--network qits-net`, and that had to go either way: buildkit refuses
-      # a custom network, and the platform targets buildkit because a swarm cannot assume the legacy
-      # builder. A sibling that DOES need the platform registry takes `--network host` instead —
-      # see qits-githost f5ae4bb.
+      #   --network host        NOT a custom network: buildkit refuses those on a build, and the
+      #                         platform targets buildkit because a swarm cannot assume the legacy
+      #                         builder. Host networking is buildkit-supported and reaches the
+      #                         registry's host-published address. (This line once passed
+      #                         `--network qits-net`; that had to go either way.)
+      #   --build-arg           names that address, derived from the same injected env the image tag
+      #                         uses, so no address is stated here. The Dockerfile turns it into
+      #                         -Dqits.maven.repository.url.
+      #
+      # Quinoa is still no part of it: its install and build commands are replaced by `--version`,
+      # so no npm registry is read, and the `localhost:8082` base images are pulled by the DAEMON on
+      # the host rather than by the build's network namespace.
       #
       # The two --secret flags are the fleet's shape for a credential inside a build: the launcher
       # injects the run's commissioned idp client as
       # $QITS_COMMISSIONED_CLIENT_ID/$QITS_COMMISSIONED_CLIENT_SECRET, and a Dockerfile that needs it
       # mounts it on one RUN — never a --build-arg, which is recorded in a pullable image's history.
-      # This build needs none, for the same reason it needs no network flag: the pom declares no qits
-      # dependency and no qits-maven repository. Both halves are free — buildx ignores a secret no
-      # RUN mounts, and a missing env source is NOT an error (measured on buildx v0.36.1).
+      # The Dockerfile's mvnw RUN now mounts both as the `qits-maven-network` server's credentials,
+      # and they stay inert until the registry answers 401: Maven sends a password only when
+      # challenged, and a missing env source is NOT an error (measured on buildx v0.36.1).
       ref="$QITS_REGISTRY/$QITS_IMAGE_REPOSITORY/qits-docs:$QITS_CI_SHA"
-      docker build \
+      docker build --network host \
+        --build-arg QITS_MAVEN_REPOSITORY_URL="http://$QITS_REGISTRY/artifacts/maven/maven" \
         --secret id=qits-client-id,env=QITS_COMMISSIONED_CLIENT_ID \
         --secret id=qits-client-secret,env=QITS_COMMISSIONED_CLIENT_SECRET \
         -t "$ref" -f docker/Dockerfile .
