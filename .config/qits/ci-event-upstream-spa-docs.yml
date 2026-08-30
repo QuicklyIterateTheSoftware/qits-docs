@@ -1,0 +1,25 @@
+# Follow the webui submodule's releases.
+#
+# THE WEBUI PATH HERE IS src/main/webui, not service/src/main/webui. This repository is a single
+# maven module rather than a domain/service pair, so the client sits at Quinoa's default under the
+# module root. Every sibling's copy of this file spells the longer path; do not copy one back over
+# this file without changing all five occurrences.
+event: SCMRelease
+when:
+  - repository: { exact: qits-spa-docs }
+steps:
+  - image: qits/build-images/node-base:latest
+    timeout-seconds: 600
+    script: |
+      set -eu
+      version=$(node -p 'JSON.parse(process.env.QITS_EVENT_PAYLOAD).version')
+      frontend_url="${QITS_CI_REPOSITORY_URL%/*}/qits-spa-docs"
+      git -c submodule.qits-spa-docs.url="$frontend_url" submodule update --init src/main/webui
+      git -C src/main/webui fetch "$frontend_url" "refs/tags/$version:refs/tags/$version"
+      git -C src/main/webui checkout --detach "$version"
+      target=$(git -C src/main/webui rev-parse HEAD)
+      current=$(git ls-tree HEAD src/main/webui | awk '{print $3}')
+      if [ "$current" = "$target" ]; then exit 0; fi
+      git update-index --add --cacheinfo 160000,$target,src/main/webui
+      git -c user.name="qits release train" -c user.email="release-train@qits.local" commit -q -m "bump(qits-spa-docs@$version): follow qits-spa-docs"
+      git push --force "$QITS_CI_REPOSITORY_URL" HEAD:refs/heads/maintenance/qits-spa-docs
