@@ -69,17 +69,18 @@ steps:
       # The suite therefore runs in that stage too (docker/Dockerfile does NOT pass -DskipTests):
       # it needs no docker and no running qits-artifacts, so it costs seconds and a broken route
       # grammar fails the build before the native compile rather than after a deploy. It DOES now
-      # need the platform's Maven repository, to resolve the two test-scope userflow jars — which is
-      # what the two docker flags below are for; the userflow story itself is not run here (failsafe
-      # binds after `package`), only compiled.
+      # need the platform's Maven repository, to resolve the test-scope userflow jar — which is
+      # what the two docker flags below are for; the userflow stories themselves are not run here
+      # (failsafe binds after `package`), only compiled.
       #
       # THE TWO DOCKER FLAGS, and this build acquired them with the userflows rollout. This file
       # used to say at length that nothing here wanted the platform's own network, because the pom
       # declared no qits dependency and Maven resolved from Central. That stopped being true: the
-      # pom now carries `qits-userflows` and `qits-service-mock` in TEST scope for
-      # DocsReadingBootstrapIT, both published to the platform's own Maven repository and available
-      # from nowhere else — and the builder stage deliberately runs the suite, so it resolves the
-      # test classpath and needs an address that answers.
+      # pom now carries `qits-userflows` in TEST scope for the userflow story catalogue, published
+      # to the platform's own Maven repository and available from nowhere else — and the builder
+      # stage deliberately runs the suite, so it resolves the test classpath and needs an address
+      # that answers. (`qits-service-mock` sat beside it until the far side became a purpose-built
+      # stand-in of qits-artifacts' docs plane; see the pom's note.)
       #
       #   --network host        NOT a custom network: buildkit refuses those on a build, and the
       #                         platform targets buildkit because a swarm cannot assume the legacy

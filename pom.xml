@@ -6,7 +6,7 @@
 
     <groupId>eu.wohlben</groupId>
     <artifactId>qits-docs</artifactId>
-    <version>2026.829.140501</version>
+    <version>2026.830.15029</version>
     <packaging>quarkus</packaging>
 
     <name>qits-docs</name>
@@ -36,17 +36,22 @@
              3.36.2, ahead of us. Bump it only past a platform bump, and everywhere at once. -->
         <quinoa.version>2.8.2</quinoa.version>
 
-        <!-- The user-story framework (TEST SCOPE ONLY): DocsReadingBootstrapIT is a userflow, so a
-             `mvn verify` also regenerates target/userstories/ — the story's documentation, sequence
-             diagram included. Published out of libs/qits-userflows into the platform's own Maven
-             repository, which is why the <repositories> block below now exists: this pom used to
-             resolve everything from Maven Central. -->
-        <qits.userflows.version>2026.828.153026</qits.userflows.version>
-        <!-- The recording service mocks the same IT boots against — the generic MockService, which
-             stands in for qits-artifacts' docs repository. Released out of
-             libs/qits-integrations-quarkus. -->
-        <qits.service-mock.version>2026.827.71232</qits.service-mock.version>
-        <!-- Where both come from. The default is the registry's HOST-PUBLISHED address, which is
+        <!-- The user-story framework (TEST SCOPE ONLY): every integration test in this repository
+             is a userflow, so a `mvn verify` also regenerates target/userstories/ — the stories'
+             documentation, their observed network diagrams included. Published out of
+             libs/qits-userflows into the platform's own Maven repository, which is why the
+             <repositories> block below exists: this pom used to resolve everything from Maven
+             Central.
+
+             qits-service-mock USED to sit beside it and no longer does. It is a GENERIC recording
+             mock — exact-path stubs, canned JSON, query-blind — and qits-docs is a pass-through
+             over ONE specific API whose every interesting property lives exactly where a generic
+             mock cannot go: a `/-/`-separated multi-segment site grammar, a `?meta.…` filter whose
+             whole point is that it is forwarded rather than applied, per-file content types and
+             ETags, and an upload route. stories/support/StoryStore is that API, standing in for it
+             the way every sibling repository's peer stub stands in for its peers. -->
+        <qits.userflows.version>2026.829.201516</qits.userflows.version>
+        <!-- Where it comes from. The default is the registry's HOST-PUBLISHED address, which is
              right for a developer and reachable from nothing else; every build that runs elsewhere
              overrides it — .config/qits/ci-event-userflows.yml from $QITS_MAVEN_REGISTRY_URL, and
              docker/Dockerfile from its QITS_MAVEN_REPOSITORY_URL build arg. -->
@@ -57,11 +62,16 @@
         <failsafe-plugin.version>${surefire-plugin.version}</failsafe-plugin.version>
         <spotless-plugin.version>2.44.5</spotless-plugin.version>
         <google-java-format.version>1.28.0</google-java-format.version>
-        <!-- INTEGRATION TESTS RUN BY DEFAULT HERE, unlike most siblings, and the reason is that
-             DocsReadingBootstrapIT is the only one there is: no docker, no database, no network
-             beyond a loopback stub, and it is also the GENERATOR of the userstories documentation.
-             The qits-githost shape — a repository whose ITs are cheap opts in, one whose suite
-             carries a heavyweight sibling names the class on the command line instead.
+        <!-- INTEGRATION TESTS RUN BY DEFAULT HERE, unlike most siblings, and the reason is what
+             they cost: no docker, no database, no spawned process and no network beyond a loopback
+             stub — six userflow stories against one launched artifact, and they are also the
+             GENERATOR of the userstories documentation. The qits-githost shape: a repository whose
+             ITs are cheap opts in, one whose suite carries a heavyweight sibling names the class on
+             the command line instead.
+
+             They share ONE @TestProfile (stories/support/StoryProfile) and are therefore ONE
+             launched process; a second profile would be a second qits-docs, and a diagram whose
+             traffic landed in whichever one happened to be running.
 
              docker/Dockerfile is unaffected: its builder stage stops at `package`, which is before
              the integration-test phase, so the image build never launches the artifact. -->
@@ -137,34 +147,29 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <!-- The user-story framework: DocsReadingBootstrapIT is written as @UserStory methods,
-                 so the packaged-boot proof doubles as documentation — steps, interactions and a
-                 sequence diagram emitted under target/userstories/. Both stories are browserless
-                 (an Interactions parameter and no Flow), so the transitive Playwright never
-                 launches anything and no browser is downloaded.
+            <!-- The user-story framework: every IT here is written as a @UserStory method, so the
+                 packaged-boot proof doubles as documentation — steps, notes and an OBSERVED network
+                 diagram emitted under target/userstories/. Every story is browserless (an
+                 Interactions parameter and no Flow), so the transitive Playwright never launches
+                 anything and no browser is downloaded.
+
+                 It also ships NetworkTaps.restAssured, which is the incoming half of every diagram
+                 here; the hand-copied StoryNetworkFilter this repository used to carry beside its
+                 story is gone.
 
                  NOTE THE GROUP ID. This project is `eu.wohlben`, the platform's libraries are
-                 `eu.wohlben.qits`, so neither of these two can be spelled with ${project.groupId}
-                 the way a sibling in the qits reactor spells it. -->
+                 `eu.wohlben.qits`, so this cannot be spelled with ${project.groupId} the way a
+                 sibling in the qits reactor spells it. -->
             <groupId>eu.wohlben.qits</groupId>
             <artifactId>qits-userflows</artifactId>
             <version>${qits.userflows.version}</version>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <!-- The recording service mock. The IT points qits.docs.artifacts-url at a MockService
-                 stubbed with qits-artifacts' own docs shapes, and its recordings are what make each
-                 interaction assertable on the STORE's end as well as the reader's. -->
-            <groupId>eu.wohlben.qits</groupId>
-            <artifactId>qits-service-mock</artifactId>
-            <version>${qits.service-mock.version}</version>
-            <scope>test</scope>
-        </dependency>
     </dependencies>
 
     <repositories>
-        <!-- The platform's own Maven repository, where the two test-scope jars above are published
-             and where nothing else in this pom comes from. The id is what a locally cached copy is
+        <!-- The platform's own Maven repository, where the test-scope jar above is published and
+             where nothing else in this pom comes from. The id is what a locally cached copy is
              recorded under, so it has to stay `qits-maven` or an offline build refuses an artifact
              it already has — and it is also the id .qits-maven-settings.xml mirrors, which is the
              one thing that outranks Maven's external-http blocker for an http:// URL. -->
@@ -200,11 +205,11 @@
                 </configuration>
             </plugin>
             <plugin>
-                <!-- DocsReadingBootstrapIT binds here. There was no failsafe wiring in this
-                     repository at all before it — this pom had no integration test to run — so the
-                     executions are declared rather than inherited from anywhere. With skipITs
-                     false above, a plain `mvn verify` launches the packaged fast-jar; the `native`
-                     profile runs the same stories against the binary. -->
+                <!-- The story catalogue binds here. There was no failsafe wiring in this
+                     repository at all before userflows — this pom had no integration test to run —
+                     so the executions are declared rather than inherited from anywhere. With
+                     skipITs false above, a plain `mvn verify` launches the packaged fast-jar; the
+                     `native` profile runs the same stories against the binary. -->
                 <artifactId>maven-failsafe-plugin</artifactId>
                 <version>${failsafe-plugin.version}</version>
                 <executions>

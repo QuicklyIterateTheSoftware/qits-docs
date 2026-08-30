@@ -15,9 +15,9 @@
 #
 # BOTH FLAGS ARRIVED WITH THE USERFLOWS ROLLOUT, and neither has a workable default. This pom used
 # to resolve everything from Maven Central — the header of .config/qits/ci-post-receive.yml said so
-# at length — and it no longer does: `qits-userflows` and `qits-service-mock`, the two TEST-scope
-# jars DocsReadingBootstrapIT is written against, are published to the platform's own Maven
-# repository and available from nowhere else. Test scope is not a reprieve, because this stage
+# at length — and it no longer does: `qits-userflows`, the TEST-scope jar the userflow story
+# catalogue is written against, is published to the platform's own Maven repository and available
+# from nowhere else. Test scope is not a reprieve, because this stage
 # deliberately runs the suite (see the absent -DskipTests below) and Maven resolves the test
 # classpath to compile it either way.
 #
@@ -71,7 +71,7 @@ COPY . .
 # `./mvnw` line there fails on JAVA_HOME. The suite needs no docker and no running qits-artifacts —
 # it is a handful of cases over the route grammar and the version parse — so it costs seconds and it
 # stops a broken grammar here rather than at a deploy. What it DOES need since the userflows
-# rollout is the platform's Maven repository, to resolve the two test-scope jars; that is what the
+# rollout is the platform's Maven repository, to resolve the test-scope jar; that is what the
 # two flags in the header are for.
 # The `cp` onto itself before the build is not redundant: Quinoa MOVES build-dir into
 # target/quinoa/build, and overlayfs cannot rename a directory that still lives in a LOWER image
@@ -89,8 +89,8 @@ COPY . .
 # thing that outranks the blocker. The settings file permits that one id and nothing else.
 #
 # THE ABSENT -DskipITs IS NOT AN OVERSIGHT EITHER. pom.xml now sets `skipITs` false — this
-# repository's only integration test is the userflow, and it is cheap — but failsafe binds to the
-# integration-test phase, which is AFTER package. Stopping at `package` is what keeps this stage
+# repository's integration tests are all userflow stories, and they are cheap — but failsafe binds
+# to the integration-test phase, which is AFTER package. Stopping at `package` is what keeps this stage
 # from launching the artifact it just compiled.
 ARG QITS_MAVEN_REPOSITORY_URL=http://registry.dev.localhost:8080/artifacts/maven/maven
 ENV QITS_MAVEN_REPOSITORY_URL=$QITS_MAVEN_REPOSITORY_URL

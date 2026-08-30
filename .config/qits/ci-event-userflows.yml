@@ -1,5 +1,5 @@
 # The per-commit userflow run: `mvn verify` at the pushed commit — which regenerates
-# target/userstories/ through DocsReadingBootstrapIT — and the reports published as one docs
+# target/userstories/ through the whole story catalogue — and the reports published as one docs
 # bundle, site @userflows/qits-docs, version = the bare commit sha, branch riding as artifacts
 # metadata for discovery.
 #
@@ -15,10 +15,12 @@
 #
 # `user: build`, and NOT a switch inside the script. In the sibling files that line is the initdb
 # workaround — zonky's embedded postgres refuses to run as root — and NONE of that applies here:
-# this service has no database, the pom names no zonky binaries, and the story's whole far side is
-# an in-process stub on loopback. It is spelled anyway because it is the fleet's posture for a step
-# that only builds: passwd-backed non-root (maven-base carries uid 1001), cap-drop=ALL, no chown
-# and no su available to undo it. Nothing this step runs wants any of those.
+# this service has no database, the pom names no zonky binaries, and the stories' whole far side is
+# an in-process stub on loopback (stories/support/StoryStore, which does write under target/: an
+# access log and the armed-fault files, both inside the build directory the step already owns).
+# It is spelled anyway because it is the fleet's posture for a step that only builds: passwd-backed
+# non-root (maven-base carries uid 1001), cap-drop=ALL, no chown and no su available to undo it.
+# Nothing this step runs wants any of those.
 #
 # Quinoa is off (`-Dquarkus.quinoa=false` — the extension's root toggle; `.enabled` is silently
 # ignored and npm still runs): the client is ci-post-receive.yml's business, where the qits-spa-docs
@@ -28,12 +30,24 @@
 # Quinoa would fail the build on exactly that. The packaged fast-jar failsafe boots is otherwise
 # exactly what ships.
 #
-# NO IT FLAGS, and that is the other half of the story. This repository opts its ITs back in from
-# the pom (`skipITs` false) the way qits-githost does, rather than naming a class here, because
-# DocsReadingBootstrapIT is the ONLY integration test there is: there is no heavyweight sibling
-# — no docker gate, no real git, no spawned database — for a flipped property to drag into
-# somebody's plain `mvn verify`. The surefire half of this run is the same five-second pair of
-# plain-JUnit classes a clone already runs.
+# NO -Dit.test, AND THAT IS DELIBERATE RATHER THAN AN OMISSION — read this before adding a story.
+# In every sibling repository the userflow step names its story classes on the command line, and a
+# class missing from that list silently never runs. Here the pom opts the whole module's ITs back in
+# (`skipITs` false, the qits-githost shape) and failsafe runs EVERY *IT in the module, so a new
+# story class is run for existing rather than for being listed. That is affordable because there is
+# no heavyweight sibling to drag in: no docker gate, no real git, no spawned database, no browser —
+# six browserless stories against one launched fast-jar, beside one loopback stub. If an expensive
+# IT is ever added here, this line stops being true and this file has to grow the list the siblings
+# carry.
+#
+# ONE @TestProfile (stories/support/StoryProfile) for all six, so failsafe launches ONE process; the
+# story classes are ordered by UserflowClassOrderer (registered from src/test/resources/
+# application.properties as the junit.quarkus.orderer.secondary-orderer), which is what puts
+# DocsReadingBootstrapIT first — the class whose edge count is the claim that the boot dialled
+# nothing.
+#
+# The surefire half of this run is the same five-second pair of plain-JUnit classes a clone already
+# runs.
 #
 # Loop review: this pipeline PUTs a docs bundle and pushes no commit — no cycle. Publish-if-absent:
 # events redeliver and docs versions are immutable, so 409 is success (the qits-spa-ui-components
@@ -54,8 +68,9 @@ steps:
       # The platform registry, exactly as qits-eventstream's step derives it: the pom's default
       # names a host-published address unreachable from a step container, and the exact-id mirror
       # in .qits-maven-settings.xml is what passes Maven's HTTP blocker. This repository's pom
-      # gained its `qits-maven` repository WITH the userflows rollout — the two test-scope jars
-      # (qits-userflows, qits-service-mock) are the first qits dependencies it has ever had.
+      # gained its `qits-maven` repository WITH the userflows rollout — qits-userflows is the only
+      # qits dependency it has (qits-service-mock was dropped when the far side became a purpose-
+      # built stand-in of qits-artifacts' docs plane; see the pom's note).
       export QITS_MAVEN_REPOSITORY_URL="$QITS_MAVEN_REGISTRY_URL"
       ./mvnw -B -ntp -s .qits-maven-settings.xml verify \
         -Dqits.maven.repository.url="$QITS_MAVEN_REPOSITORY_URL" \
