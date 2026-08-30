@@ -15,13 +15,12 @@ version-addressed one and streams the bytes qits-artifacts holds.
     ./mvnw package && java -jar target/quarkus-app/quarkus-run.jar
     ./mvnw verify -Dnative && ./target/qits-docs
 
-`verify` now also launches the packaged artifact: `DocsReadingBootstrapIT` is this repository's one
-integration test and its two **userflow** stories are what emit `target/userstories/`, published per
-commit as the docs site `@userflows/qits-docs` — into the store this service reads. It needs no
-docker and no running qits-artifacts (the far side is an in-process recording stub on loopback),
-but it does need **Maven** to reach the platform's own repository for the two test-scope jars
-`qits-userflows` and `qits-service-mock`, which are the first qits dependencies this pom has ever
-had. Off the platform network that means the usual pair:
+`verify` also launches the packaged artifact: every integration test here is a **userflow story**,
+and the six of them are what emit `target/userstories/`, published per commit as the docs site
+`@userflows/qits-docs` — into the store this service reads. They need no docker and no running
+qits-artifacts (the far side is an in-process stand-in on loopback), but they do need **Maven** to
+reach the platform's own repository for the one test-scope jar `qits-userflows`, which is the only
+qits dependency this pom has. Off the platform network that means the usual pair:
 
     export QITS_MAVEN_REPOSITORY_URL=http://registry.dev.localhost:8080/artifacts/maven/maven
     ./mvnw -s .qits-maven-settings.xml verify
@@ -164,10 +163,51 @@ is at the host root now and `/docs` is an ignored prefix, so the fall-through wo
 Quarkus' own HTML 404 instead. `read/` is no longer reserved out of the site grammar either — the
 reader is at `/read/**`, outside `/docs` entirely. `q/` and `api/` still are.
 
+## User stories
+
+`src/test/java/.../stories/` is this repository's whole integration suite, written as
+[userflows](https://github.com/QuicklyIterateTheSoftware/qits-userflows): each test is a
+`@UserStory` method that asserts *and* emits its own documentation — steps, a narrative, and a
+**network diagram drawn from traffic that was observed rather than narrated**. `mvn verify`
+regenerates `target/userstories/`, and `.config/qits/ci-event-userflows.yml` publishes it per commit
+as `@userflows/qits-docs`, which is a site this service then serves. A reader following the stories
+arrives at the stories.
+
+| Story | Category | What it pins |
+| --- | --- | --- |
+| The catalog groups every published site by its scope | `reading` | the flat list is grouped **here**; the unscoped group; the store asked once — and, because this class drains first, that the boot dialled nothing |
+| The branch filter is the store's question, not this service's | `reading` | `?branch=` leaves as `?meta.git.branch.name=`, percent-encoded; filtered-to-nothing is 200 and not 404 |
+| A version published a second ago is the one a reader lands on | `reading` | publish → read, end to end: `latest` as a query, both redirects, `ETag` passed through and `Cache-Control` replaced |
+| The stories this run publishes are read back through the same door | `reading` | a userflows bundle's `files` and dotted `metadata`, verbatim; the bundle wire three segments deep |
+| A store that cannot answer is never an empty shelf | `refusals` | 404 vs 502, and the three different ways a store fails: a status, a payload, and silence |
+| The answers that cost the store nothing | `refusals` | the three answers decided from the URL alone — with a live recorder on the store proving it was never dialled |
+
+Three things are worth knowing before adding one:
+
+- **One `@TestProfile` for all of them** (`stories/support/StoryProfile`), because a profile is what
+  failsafe launches a process for. Two profiles would be two qits-docs and a diagram whose traffic
+  landed in whichever one was running.
+- **The far side is `stories/support/StoryStore`**, a real listener speaking qits-artifacts' docs
+  plane — the `/-/` grammar parsed, the `?meta.…` filter honoured, per-file content types and
+  ETags, and a `PUT` that really publishes. It replaced a generic recording mock, because every
+  property these stories are about lives exactly where a canned-JSON stub cannot go.
+- **Nothing narrates an edge.** The incoming half is the framework's shipped RestAssured tap; the
+  outgoing half is the store's own access log. A story asserts and notes; it draws nothing.
+
 ## Not built yet
 
 - **A native IT.** `mvn verify -Dnative` compiles the binary but nothing yet drives it. The claim
-  worth proving that way is that `java.net.http` streaming survives the compile.
+  worth proving that way is that `java.net.http` streaming survives the compile. (The stories above
+  would run against it unchanged — the `native` profile launches the same catalogue.)
+- **A percent-encoded site name.** `/docs/%40qits/ui-components` does **not** resolve:
+  `DocsPaths`' character classes admit no `%`, so it falls past the site route and reaches Quarkus'
+  own HTML 404 — the one body shape this service otherwise never produces. No browser or `curl`
+  encodes `@` in a path, so nothing real hits it, and it was found only because RestAssured does.
+  Worth a decision (decode before matching, or catch the fall-through) rather than a surprise.
+- **The span export.** `quarkus-opentelemetry` is the only dial-out besides the store and it is
+  disabled in the story profile, exactly as `%dev` and `%test` disable it. An exporter flushes on
+  its own schedule and would draw an arrow into whichever diagram happened to be open, so no story
+  covers it and no story claims its absence either.
 - **Anything but Storybook.** Every bundle so far is one, and the reader assumes only that a bundle
   has an `index.html` and refers to its assets relatively. A generator that does neither would need
   the reader to learn something.

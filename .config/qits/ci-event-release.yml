@@ -95,9 +95,9 @@ steps:
 
       # --- half two: the image ------------------------------------------------------------------
       # THE TWO DOCKER FLAGS, the same pair ci-post-receive.yml explains at length: the pom now
-      # carries `qits-userflows` and `qits-service-mock` in TEST scope for DocsReadingBootstrapIT,
-      # both published only to the platform's own Maven repository, and the builder stage runs the
-      # suite — so it resolves the test classpath and needs an address that answers. `--network
+      # carries `qits-userflows` in TEST scope for the userflow story catalogue, published only to
+      # the platform's own Maven repository, and the builder stage runs the suite — so it resolves
+      # the test classpath and needs an address that answers. `--network
       # host` because buildkit refuses a custom network; `--build-arg` because the address is
       # derived from injected env rather than stated here. Quinoa is still no part of it (its
       # commands are replaced by `--version`), and the base images are pulled by the DAEMON on the
