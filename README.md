@@ -1,8 +1,9 @@
-# qits-docs
+# qits-docs-service
 
-**The environment's reading room.** One address where every documentation site published into this
-environment can be read — `docs.<env>.<domain>/docs/@qits/ui-components/` and you are looking at the
-newest release's workbench.
+**The environment's reading room**, deployed as the `qits-docs` application. One address where every
+documentation site published into this environment can be read —
+`docs.<env>.<domain>/docs/@qits/ui-components/` and you are looking at the newest release's
+workbench.
 
 An **environment service**: it is deployed once per environment and reads that environment's own
 `qits-artifacts`. It was platform-scoped only because the store was.
@@ -133,7 +134,7 @@ qits-artifacts would take this container down for an outage it is designed to su
 
 ## The client
 
-`src/main/webui` is the [qits-spa-docs](https://github.com/QuicklyIterateTheSoftware/qits-spa-docs)
+`src/main/webui` is the [qits-docs-frontend](https://github.com/QuicklyIterateTheSoftware/qits-docs-frontend)
 submodule, built and served by Quinoa **at the root of this service's host** (`baseHref: /`,
 `quarkus.quinoa.ui-root-path=/`). Two pages, and a scoped spelling of each:
 
@@ -166,7 +167,7 @@ reader is at `/read/**`, outside `/docs` entirely. `q/` and `api/` still are.
 ## User stories
 
 `src/test/java/.../stories/` is this repository's whole integration suite, written as
-[userflows](https://github.com/QuicklyIterateTheSoftware/qits-userflows): each test is a
+[userflows](https://github.com/QuicklyIterateTheSoftware/qits-userflows-javalib): each test is a
 `@UserStory` method that asserts *and* emits its own documentation — steps, a narrative, and a
 **network diagram drawn from traffic that was observed rather than narrated**. `mvn verify`
 regenerates `target/userstories/`, and `.config/qits/ci-event-userflows.yml` publishes it per commit
