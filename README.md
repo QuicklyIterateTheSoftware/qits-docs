@@ -17,7 +17,7 @@ version-addressed one and streams the bytes qits-artifacts holds.
     ./mvnw verify -Dnative && ./target/qits-docs
 
 `verify` also launches the packaged artifact: every integration test here is a **userflow story**,
-and the six of them are what emit `target/userstories/`, published per commit as the docs site
+and the six of them are what emit `target/userstories/`, published per release request as the docs site
 `@userflows/qits-docs` — into the store this service reads. They need no docker and no running
 qits-artifacts (the far side is an in-process stand-in on loopback), but they do need **Maven** to
 reach the platform's own repository for the one test-scope jar `qits-userflows`, which is the only
@@ -170,8 +170,10 @@ reader is at `/read/**`, outside `/docs` entirely. `q/` and `api/` still are.
 [userflows](https://github.com/QuicklyIterateTheSoftware/qits-userflows-javalib): each test is a
 `@UserStory` method that asserts *and* emits its own documentation — steps, a narrative, and a
 **network diagram drawn from traffic that was observed rather than narrated**. `mvn verify`
-regenerates `target/userstories/`, and `.config/qits/ci-event-userflows.yml` publishes it per commit
-as `@userflows/qits-docs`, which is a site this service then serves. A reader following the stories
+regenerates `target/userstories/`, and the non-gating step of
+`.config/qits/ci-event-release-request.yml` publishes it once per release-request fold as
+`@userflows/qits-docs`, which is a site this service then serves. That step carries `gating: false`:
+a red story fails the run and shows red without holding the request's build gate. A reader following the stories
 arrives at the stories.
 
 | Story | Category | What it pins |
