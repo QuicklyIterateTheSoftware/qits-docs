@@ -21,14 +21,17 @@
 # deliberately runs the suite (see the absent -DskipTests below) and Maven resolves the test
 # classpath to compile it either way.
 #
-#   --network host        NOT a custom network: buildkit — the builder format the platform targets,
-#                         because a swarm cannot assume the legacy builder — refuses custom networks
-#                         on a build. Host networking is buildkit-supported and reaches the
-#                         registry's host-published address.
-#   --build-arg           names that address, derived from the same injected env the image tag uses,
-#                         so no address is stated in the pipeline. The ARG below turns it into
+#   --network host        A HAND BUILD'S FLAG, not CI's any more. It puts the build in the host
+#                         namespace, which is where the registry's host-published address resolves.
+#                         Not a custom network — buildkit refuses those on a build.
+#   --build-arg           names the address the resolve uses. The ARG below turns it into
 #                         -Dqits.maven.repository.url, which the pom's `qits-maven` repository reads
 #                         and .qits-maven-settings.xml mirrors.
+#
+# CI PASSES NO --network AT ALL SINCE THE BUILDER MIGRATION. Both pipeline files drive the platform's
+# own buildkitd, where a `RUN` executes on qits-net, so they pass the IN-NETWORK Maven address
+# ($QITS_MAVEN_REGISTRY_URL) into the same ARG and need no network flag to reach it. See
+# qits-buildkit-plan.md in the wrapper.
 #
 # THE CLIENT IS BUILT BEFORE THIS IMAGE, NOT IN IT — qits-gateway's deviation from the platform's
 # Quinoa recipe, for its reason exactly. src/main/webui is qits-spa-docs and it depends on
@@ -108,11 +111,19 @@ ENV QITS_MAVEN_CENTRAL_URL=$QITS_MAVEN_CENTRAL_URL
 # is pullable, and a build arg is recorded where anyone who pulls it can read it.
 # `.qits-maven-settings.xml` reads the two variables as the `qits-maven-network` server.
 #
-# Absent secrets leave both variables unset, which is the state every build is in today and the
-# state a host-side `docker build` is in permanently: Maven sends credentials only when a repository
-# answers 401, and the registry does not yet.
-RUN --mount=type=secret,id=qits-client-id,env=QITS_MAVEN_AUTH_USR \
-    --mount=type=secret,id=qits-client-secret,env=QITS_MAVEN_AUTH_PSW \
+# FILE FORM, NOT `env=`. The mounts are bare (`/run/secrets/<id>`, read into this command's own
+# environment by the two `cat`s below) rather than the `env=` mount form they used to be: `env=`
+# needs a dockerfile frontend that supports it, and under the platform's own buildkitd the frontend
+# is the BUILDER's to pick rather than this file's, while the bare file mount is served identically
+# by every frontend version. See qits-buildkit-plan.md in the wrapper.
+#
+# Absent secrets leave both variables empty — the `|| true`, which is every hand build's state —
+# and the settings read that exactly as they read unset: Maven sends credentials only when a
+# repository answers 401, and the registry does not yet.
+RUN --mount=type=secret,id=qits-client-id \
+    --mount=type=secret,id=qits-client-secret \
+    export QITS_MAVEN_AUTH_USR="$(cat /run/secrets/qits-client-id 2>/dev/null || true)"; \
+    export QITS_MAVEN_AUTH_PSW="$(cat /run/secrets/qits-client-secret 2>/dev/null || true)"; \
     d=src/main/webui/dist/qits-spa-docs/browser; \
     test -f "$d/index.html" || { \
       echo "No built client at $d." >&2; \
@@ -147,8 +158,8 @@ RUN --mount=type=secret,id=qits-client-id,env=QITS_MAVEN_AUTH_USR \
 # The project's CycloneDX document, exported so the release step can PUT it to the artifacts store. A
 # stage rather than a layer of the runtime image, and BEFORE the runtime stage on purpose: the last
 # stage is what a plain `docker build` builds, and that must stay the image. The release step reaches
-# this one with `--target sbom --output type=local` using the SAME args and secrets as the image
-# build, so every layer above is a cache hit and the export costs seconds — which matters more here
+# this one with `--opt target=sbom --output type=local` using the SAME build-args and secrets as the
+# image build, so every layer above is a cache hit and the export costs seconds — which matters more here
 # than anywhere, since this stage's mvnw also runs the suite. `makeBom` rides on that one invocation
 # rather than a second one, for the same reason: one RUN, one layer, one truth.
 FROM scratch AS sbom
