@@ -50,7 +50,7 @@
              whole point is that it is forwarded rather than applied, per-file content types and
              ETags, and an upload route. stories/support/StoryStore is that API, standing in for it
              the way every sibling repository's peer stub stands in for its peers. -->
-        <qits.userflows.version>2026.902.53027</qits.userflows.version>
+        <qits.userflows.version>2026.904.223009</qits.userflows.version>
         <!-- Where it comes from. The default is the registry's HOST-PUBLISHED address, which is
              right for a developer and reachable from nothing else; every build that runs elsewhere
              overrides it — .config/qits/ci-event-userflows.yml from $QITS_MAVEN_REGISTRY_URL, and
